@@ -1,0 +1,464 @@
+# index.html
+<!doctype html>
+<html lang="bg">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VideoQuiz Ultimate</title>
+    <meta name="description" content="Интерактивни видео уроци и куизове" />
+    <link rel="stylesheet" href="./assets/css/styles.css" />
+  </head>
+
+  <body>
+    <header class="topbar">
+      <div class="container topbar__inner">
+        <div class="brand" data-action="nav" data-view="home" role="button" tabindex="0">
+          <div class="brand__logo">VQ</div>
+          <div class="brand__text">
+            <div class="brand__title">VideoQuiz Ultimate</div>
+            <div class="brand__sub">Cloud Edition</div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="btn btn--ghost" data-action="nav" data-view="home">Начало</button>
+          <button class="btn btn--ghost" data-action="nav" data-view="solo">Индивидуално</button>
+          <button class="btn btn--ghost" data-action="nav" data-view="class">В клас</button>
+          <button class="btn btn--ghost" data-action="nav" data-view="teacher">Учители</button>
+          <button class="btn btn--ghost" data-action="nav" data-view="library">Библиотека</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container main">
+      <div id="viewRoot"></div>
+    </main>
+
+    <div id="modalRoot"></div>
+
+    <script type="module" src="./assets/js/app.js"></script>
+  </body>
+</html>
+
+
+# assets/css/styles.css
+:root {
+  --bg: #0b1020;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel2: rgba(255, 255, 255, 0.08);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.68);
+  --border: rgba(255, 255, 255, 0.12);
+  --danger: rgba(255, 80, 80, 0.18);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --r: 18px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 20% 10%, rgba(120,140,255,0.22), transparent),
+    radial-gradient(900px 500px at 80% 10%, rgba(80,255,200,0.14), transparent),
+    var(--bg);
+  color: var(--text);
+}
+
+.container { width: min(1100px, 92vw); margin: 0 auto; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(10, 14, 28, 0.72);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  gap: 14px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+.brand:focus { outline: 2px solid rgba(255,255,255,0.22); outline-offset: 4px; border-radius: 14px; }
+
+.brand__logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  box-shadow: var(--shadow);
+  font-weight: 800;
+}
+
+.brand__title { font-weight: 750; line-height: 1.1; }
+.brand__sub { font-size: 13px; color: var(--muted); }
+
+.nav { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+.main { padding: 22px 0 60px; }
+
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+  .grid--2 { grid-template-columns: 1fr; }
+  .nav { justify-content: flex-start; }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.card:hover { background: var(--panel2); }
+.card--danger { background: var(--danger); }
+
+h2, h3 { margin: 0 0 10px; }
+p { margin: 0 0 10px; }
+.muted { color: var(--muted); }
+
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row--space { justify-content: space-between; }
+
+.field { display: grid; gap: 6px; margin: 10px 0; }
+.field > span { font-size: 13px; color: var(--muted); }
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,0.22);
+  color: var(--text);
+  outline: none;
+}
+
+.input--area { resize: vertical; min-height: 120px; }
+
+.btn {
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.10);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.btn:hover { background: rgba(255,255,255,0.14); }
+.btn--ghost { background: transparent; }
+.btn--ghost:hover { background: rgba(255,255,255,0.08); }
+
+.divider { height: 1px; background: var(--border); margin: 14px 0; }
+.list { display: grid; gap: 10px; padding-top: 6px; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.modal__panel { width: min(720px, 96vw); }
+
+.toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  border-radius: 14px;
+  color: var(--text);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+}
+
+
+# assets/js/state.js
+export const state = {
+  view: "home",
+
+  auth: {
+    user: null,
+    isReady: false,
+  },
+
+  data: {
+    lessons: [],
+    results: [],
+  },
+
+  ui: {
+    busy: false,
+  },
+};
+
+export function setView(view) {
+  state.view = view;
+}
+
+export function setUser(user) {
+  state.auth.user = user;
+  state.auth.isReady = true;
+}
+
+export function setBusy(isBusy) {
+  state.ui.busy = isBusy;
+}
+
+
+# assets/js/ui.js
+const VIEW_ROOT_ID = "viewRoot";
+const MODAL_ROOT_ID = "modalRoot";
+
+function el(id) {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`Missing root element: #${id}`);
+  return node;
+}
+
+export function renderView(viewName, state) {
+  const root = el(VIEW_ROOT_ID);
+  root.innerHTML = getViewHtml(viewName, state);
+}
+
+export function renderModal(name) {
+  const root = el(MODAL_ROOT_ID);
+  root.innerHTML = getModalHtml(name);
+}
+
+export function closeModal() {
+  const root = el(MODAL_ROOT_ID);
+  root.innerHTML = "";
+}
+
+export function toast(message, ms = 1800) {
+  const node = document.createElement("div");
+  node.className = "toast";
+  node.textContent = message;
+  document.body.appendChild(node);
+  window.setTimeout(() => node.remove(), ms);
+}
+
+function getViewHtml(viewName, state) {
+  switch (viewName) {
+    case "home":
+      return `
+        <section class="grid">
+          <article class="card">
+            <h2>Индивидуално</h2>
+            <p class="muted">Самостоятелно / СОП / Обсъждане</p>
+            <div class="row">
+              <button class="btn" data-action="nav" data-view="solo">Отвори</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>В клас</h2>
+            <p class="muted">Влизане със сесиен PIN</p>
+            <div class="row">
+              <button class="btn" data-action="nav" data-view="class">Отвори</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>Учители</h2>
+            <p class="muted">Вход и управление на уроци</p>
+            <div class="row">
+              <button class="btn" data-action="nav" data-view="teacher">Отвори</button>
+            </div>
+          </article>
+        </section>
+      `;
+
+    case "solo":
+      return `
+        <section class="card">
+          <div class="row row--space">
+            <h2>Индивидуално</h2>
+            <button class="btn btn--ghost" data-action="nav" data-view="home">Назад</button>
+          </div>
+
+          <div class="grid grid--2">
+            <label class="field">
+              <span>Режим</span>
+              <select class="input" id="soloMode">
+                <option value="normal">Нормален</option>
+                <option value="sop">СОП</option>
+                <option value="discussion">Обсъждане</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Код на урок (импорт)</span>
+              <div class="row">
+                <input class="input" id="importCode" placeholder="Постави код…" />
+                <button class="btn" data-action="open-modal" data-modal="import">Импорт</button>
+              </div>
+            </label>
+          </div>
+
+          <div class="row">
+            <button class="btn" data-action="start-solo">Започни</button>
+          </div>
+        </section>
+      `;
+
+    case "class":
+      return `
+        <section class="card">
+          <div class="row row--space">
+            <h2>В клас</h2>
+            <button class="btn btn--ghost" data-action="nav" data-view="home">Назад</button>
+          </div>
+
+          <label class="field">
+            <span>PIN</span>
+            <div class="row">
+              <input class="input" id="classPin" placeholder="напр. 1234" />
+              <button class="btn" data-action="join-session">Влез</button>
+            </div>
+          </label>
+
+          <div class="divider"></div>
+          <div id="classStatus" class="muted">Готово за вход.</div>
+        </section>
+      `;
+
+    case "teacher":
+      return `
+        <section class="grid grid--2">
+          <article class="card">
+            <h2>Вход (учители)</h2>
+
+            <label class="field">
+              <span>Имейл</span>
+              <input class="input" id="teacherEmail" type="email" autocomplete="email" />
+            </label>
+
+            <label class="field">
+              <span>Парола</span>
+              <input class="input" id="teacherPass" type="password" autocomplete="current-password" />
+            </label>
+
+            <label class="field">
+              <span>Секретен код</span>
+              <input class="input" id="teacherSecret" />
+            </label>
+
+            <div class="row">
+              <button class="btn" data-action="teacher-login">Влез</button>
+              <button class="btn btn--ghost" data-action="teacher-register">Регистрация</button>
+            </div>
+
+            <p class="muted" id="teacherAuthStatus">
+              ${state.auth.user ? "Влезли сте." : "Не сте влезли."}
+            </p>
+          </article>
+
+          <article class="card">
+            <h2>Панел</h2>
+            <p class="muted">Достъпен след вход</p>
+            <div class="row">
+              <button class="btn" data-action="nav" data-view="library">Библиотека</button>
+              <button class="btn btn--ghost" data-action="teacher-logout">Изход</button>
+            </div>
+          </article>
+        </section>
+      `;
+
+    case "library":
+      return `
+        <section class="card">
+          <div class="row row--space">
+            <div>
+              <h2>Библиотека</h2>
+              <p class="muted">Уроци и резултати</p>
+            </div>
+            <div class="row">
+              <button class="btn" data-action="new-lesson">+ Нов урок</button>
+              <button class="btn btn--ghost" data-action="open-modal" data-modal="import">Импорт</button>
+              <button class="btn btn--ghost" data-action="nav" data-view="home">Начало</button>
+            </div>
+          </div>
+
+          <div class="grid grid--2">
+            <div>
+              <h3>Уроци</h3>
+              <div class="list muted" id="lessonsList">
+                ${state.data.lessons.length ? "" : "Няма уроци (демо)."}
+              </div>
+            </div>
+
+            <div>
+              <h3>Резултати</h3>
+              <div class="row">
+                <button class="btn btn--ghost" data-action="export-excel">Експорт Excel</button>
+              </div>
+              <div class="list muted" id="resultsList">
+                ${state.data.results.length ? "" : "Няма резултати (демо)."}
+              </div>
+            </div>
+          </div>
+        </section>
+      `;
+
+    case "error-locked":
+      return `
+        <section class="card card--danger">
+          <h2>Достъпът е отказан</h2>
+          <p class="muted">Firestore Rules блокират достъпа (заключена база).</p>
+          <div class="row">
+            <button class="btn" data-action="nav" data-view="home">Назад</button>
+          </div>
+        </section>
+      `;
+
+    default:
+      return `
+        <section class="card">
+          <h2>Няма такъв екран</h2>
+          <p class="muted">${escapeHtml(viewName)}</p>
+          <div class="row">
+            <button class="btn" data-action="nav" data-view="home">Към началото</button>
+          </div>
+        </section>
+      `;
+  }
+}
+
+function getModalHtml(name) {
+  if (name !== "import") return "";
+  return `
+    <div class="modal" data-modal="import">
+      <div class="modal__panel card">
+        <div class="row row--space">
+          <h3>Импортиране на урок</h3>
+          <button class="btn btn--ghost" data-action="close-modal">Затвори</button>
+        </div>
+
+        <label class="field">
+          <span>Постави кода тук</span>
+          <textarea class="input input--area" id="importTextarea" rows="6"></textarea>
+        </label>
+
+        <div class="row">
+          <button clas
