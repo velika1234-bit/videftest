@@ -2088,3 +2088,32 @@ window.generateAIQuestions = async function() {
 };
 
 console.log("✅ AI функцията е заредена");
+// --- AI ГЕНЕРАЦИЯ ---
+window.generateAIQuestions = async function() {
+    if (!currentVideoId) {
+        window.showMessage("Първо заредете видео!", "error");
+        return;
+    }
+    window.showMessage("🤖 AI анализира видеото... (30-60 секунди)", "info");
+    try {
+        const generateFunc = httpsCallable(functions, 'generateAIQuestions');
+        const result = await generateFunc({ videoId: currentVideoId });
+        const aiQuestions = result.data;
+        if (!aiQuestions || !aiQuestions.length) throw new Error("Няма въпроси");
+        const newQuestions = aiQuestions.map(q => ({
+            time: q.time || 0,
+            text: q.text,
+            type: 'single',
+            points: 1,
+            options: q.options || ["", "", "", ""],
+            correct: q.correct || 0
+        }));
+        questions = [...questions, ...newQuestions];
+        questions.sort((a,b) => a.time - b.time);
+        renderEditorList();
+        window.showMessage(`✅ Добавени ${newQuestions.length} въпроса!`, "success");
+    } catch (error) {
+        console.error(error);
+        window.showMessage("❌ Грешка при AI генерация: " + (error.message || "Неизвестна"), "error");
+    }
+};
