@@ -1,7 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -25,7 +28,7 @@ let isTeacher = false;
 let editingQuizId = null;
 let editingQuestionIndex = null;
 const MASTER_TEACHER_CODE = "vilidaf76";
-
+const functions = getFunctions(app);
 let player, solvePlayer, hostPlayer;
 let questions = [], currentQuiz = null, studentNameValue = "";
 let sessionID = "", liveActiveQIdx = -1;
@@ -2045,7 +2048,57 @@ window.editQuiz = (id) => {
 };
 
 window.deleteQuiz = async (id) => { if (user && confirm("Изтриване на урока?")) await deleteDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', id)); };
+// --- AI ГЕНЕРАЦИЯ (Firebase Functions) ---
+window.generateAIQuestions = async function() {
+  if (!currentVideoId) {
+    return window.showMessage("Първо заредете видео!", "error");
+  }
 
+  const count = prompt("Колко въпроса да генерира AI? (1-10)", "5");
+  if (!count) return;
+  
+  const num = parseInt(count);
+  if (isNaN(num) || num < 1 || num > 10) {
+    return window.showMessage("Моля, въведете число между 1 и 10.", "error");
+  }
+
+  window.showMessage("🤖 AI анализира видеото... това отнема до 2 минути.", "info");
+
+  try {
+    const generateAIQuestionsFunction = httpsCallable(functions, 'generateAIQuestions');
+    const result = await generateAIQuestionsFunction({ 
+      videoId: currentVideoId,
+      count: num 
+    });
+
+    const aiQuestions = result.data;
+
+    if (!aiQuestions || aiQuestions.length === 0) {
+      throw new Error("Няма генерирани въпроси");
+    }
+
+    // Трансформираме към формата на редактора
+    const newQuestions = aiQuestions.map(q => ({
+      time: q.time || 0,
+      text: q.text,
+      type: 'single',
+      points: 1,
+      options: q.options,
+      correct: q.correct
+    }));
+
+    // Добавяме към съществуващите въпроси
+    questions = [...questions, ...newQuestions];
+    questions.sort((a,b) => a.time - b.time);
+    
+    renderEditorList();
+    window.showMessage(`✅ Добавени ${newQuestions.length} AI-генерирани въпроса!`, "success");
+
+  } catch (error) {
+    console.error("AI generation error:", error);
+    window.showMessage("❌ Грешка при AI генерация: " + (error.message || "Неизвестна грешка"), "error");
+  }
+};
 // --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
