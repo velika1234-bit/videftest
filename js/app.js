@@ -688,4 +688,1383 @@ function renderHostDashboard() {
     let fastestOverallMs = null;
     let fastestOverallName = null;
     lastFetchedParticipants.forEach((p) => {
-       
+        const r = p.reactionMs || {};
+        Object.values(r).forEach((ms) => {
+            if (typeof ms === 'number' && ms >= 0 && (fastestOverallMs === null || ms < fastestOverallMs)) {
+                fastestOverallMs = ms;
+                fastestOverallName = p.name || 'Участник';
+            }
+        });
+    });
+    const fastestEl = document.getElementById('fastest-reaction-text');
+    if (fastestEl) {
+        fastestEl.innerText = fastestOverallMs !== null
+            ? `⚡ Най-бърз отговор: ${fastestOverallName} (${(fastestOverallMs / 1000).toFixed(2)}s)`
+            : '⚡ Най-бърз отговор: няма данни';
+    }
+
+    const leaderboard = [...lastFetchedParticipants].map((p) => {
+        const answersObj = p.answers || {};
+        const givenAnswers = Object.values(answersObj).filter(v => v === true || v === false).length;
+        const correctAnswers = Object.values(answersObj).filter(v => v === true).length;
+        const accuracy = givenAnswers > 0 ? Math.round((correctAnswers / givenAnswers) * 100) : 0;
+
+        const reactionValues = Object.values(p.reactionMs || {}).filter(v => typeof v === 'number' && v >= 0);
+        const bestReactionMs = reactionValues.length ? Math.min(...reactionValues) : null;
+        return { ...p, givenAnswers, correctAnswers, accuracy, bestReactionMs };
+    }).sort((a, b) => (b.score - a.score) || (b.accuracy - a.accuracy));
+
+    document.getElementById('host-results-body').innerHTML = leaderboard
+        .map((p, idx) => `
+        <tr class="border-b transition-all hover:bg-slate-50 animate-pop">
+            <td class="py-3 px-3 font-black text-xs sm:text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-300 w-5">${idx+1}.</span>
+                    <span class="text-lg">${p.avatar || '👤'}</span>
+                    <span class="truncate">${p.name}</span>
+                </div>
+                <div class="mt-1 text-[10px] text-slate-400 font-bold">Отг.: ${p.givenAnswers}/${quizQuestions.length || 0} · Точност: ${p.accuracy}%${p.bestReactionMs !== null ? ` · ⚡ ${(p.bestReactionMs / 1000).toFixed(2)}s` : ''}</div>
+            </td>
+            <td class="py-3 px-3 text-right"><span class="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-xl font-black text-xs sm:text-sm">${p.score} / ${totalMax || 0}</span></td>
+            <td class="py-3 px-2 text-center">
+                <button onclick="window.deleteParticipant('${p.id}')" class="text-slate-300 hover:text-rose-500 transition-colors p-1 rounded-lg" title="Премахни участник">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </td>
+        </tr>`).join('');
+    if (window.lucide) lucide.createIcons();
+}
+
+window.finishLiveSession = async () => {
+    if (!sessionID) return;
+    try {
+        await updateDoc(getSessionRefById(sessionDocId), { status: 'finished' });
+        document.getElementById('export-buttons-container').classList.remove('hidden');
+        document.getElementById('export-buttons-container').classList.add('flex');
+        window.showMessage("Сесията приключи!");
+    } catch(e) {
+        if(e.code === 'permission-denied') window.showRulesHelpModal();
+    }
+};
+
+// --- EXCEL & PRINT LOGIC ---
+function getResultsData() {
+    if (!currentQuiz || !lastFetchedParticipants) return [];
+
+    const totalMax = currentQuiz.q.reduce((a, b) => a + (b.points || 1), 0);
+
+    let data = [];
+    let header = ["Позиция", "Име", `Точки (Макс: ${totalMax})`];
+    currentQuiz.q.forEach((_, idx) => header.push(`Въпрос ${idx + 1}`));
+    data.push(header);
+
+    [...lastFetchedParticipants].sort((a,b)=>b.score-a.score).forEach((p,i) => {
+        let row = [
+            (i+1),
+            p.name,
+            p.score
+        ];
+
+        currentQuiz.q.forEach((_, qIdx) => {
+            let ans = undefined;
+            if (p.answers) {
+                ans = p.answers[qIdx];
+                if (ans === undefined) ans = p.answers[String(qIdx)];
+            }
+
+            let cell = "-";
+            if (ans === true) cell = "ВЯРНО";
+            else if (ans === false) cell = "ГРЕШНО";
+
+            row.push(cell);
+        });
+        data.push(row);
+    });
+    return data;
+}
+
+function getClassQuestionStats() {
+    if (!currentQuiz || !Array.isArray(currentQuiz.q)) return { rows: [], summary: null };
+
+    const participants = [...lastFetchedParticipants];
+    const participantsCount = participants.length;
+    const stats = currentQuiz.q.map((q, qIdx) => {
+        let correct = 0;
+        let wrong = 0;
+        let answered = 0;
+        let firstCorrectName = '-';
+        let firstCorrectMs = null;
+
+        participants.forEach((p) => {
+            const answers = p.answers || {};
+            let ans = answers[qIdx];
+            if (ans === undefined) ans = answers[String(qIdx)];
+
+            if (ans === true) {
+                correct += 1;
+                answered += 1;
+                const r = p.reactionMs || {};
+                let ms = r[qIdx];
+                if (ms === undefined) ms = r[String(qIdx)];
+                if (typeof ms === 'number' && ms >= 0 && (firstCorrectMs === null || ms < firstCorrectMs)) {
+                    firstCorrectMs = ms;
+                    firstCorrectName = p.name || 'Участник';
+                }
+            } else if (ans === false) {
+                wrong += 1;
+                answered += 1;
+            }
+        });
+
+        const missing = Math.max(0, participantsCount - answered);
+        const correctPct = answered > 0 ? Math.round((correct / answered) * 100) : 0;
+        const wrongPct = answered > 0 ? Math.round((wrong / answered) * 100) : 0;
+
+        return {
+            qIdx,
+            questionText: q?.text || `Въпрос ${qIdx + 1}`,
+            correct,
+            wrong,
+            missing,
+            answered,
+            participantsCount,
+            correctPct,
+            wrongPct,
+            firstCorrectName,
+            firstCorrectSeconds: firstCorrectMs !== null ? (firstCorrectMs / 1000).toFixed(2) : '-'
+        };
+    });
+
+    const totalCorrect = stats.reduce((a, r) => a + r.correct, 0);
+    const totalWrong = stats.reduce((a, r) => a + r.wrong, 0);
+    const totalAnswered = totalCorrect + totalWrong;
+    const classCorrectPct = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+    const classWrongPct = totalAnswered > 0 ? Math.round((totalWrong / totalAnswered) * 100) : 0;
+
+    return {
+        rows: stats,
+        summary: {
+            participantsCount,
+            totalAnswered,
+            totalCorrect,
+            totalWrong,
+            classCorrectPct,
+            classWrongPct
+        }
+    };
+}
+
+function getSoloResultsExportModel() {
+    const sortedResults = [...soloResults].sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp));
+    const attempts = sortedResults.map((r, idx) => {
+        const parsed = parseScoreValue(r.score);
+        const pct = parsed.total > 0 ? Math.round((parsed.score / parsed.total) * 100) : 0;
+        return {
+            idx: idx + 1,
+            studentName: r.studentName || '-',
+            quizTitle: r.quizTitle || '-',
+            dateTime: window.formatDate(r.timestamp),
+            scoreLabel: r.score || '-',
+            score: parsed.score,
+            total: parsed.total,
+            pct
+        };
+    });
+
+    const totalAttempts = attempts.length;
+    const totalScore = attempts.reduce((a, r) => a + r.score, 0);
+    const totalMax = attempts.reduce((a, r) => a + r.total, 0);
+    const avgPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
+
+    const byStudent = new Map();
+    attempts.forEach((r) => {
+        const prev = byStudent.get(r.studentName) || { attempts: 0, score: 0, total: 0 };
+        prev.attempts += 1;
+        prev.score += r.score;
+        prev.total += r.total;
+        byStudent.set(r.studentName, prev);
+    });
+
+    const studentSummary = Array.from(byStudent.entries()).map(([name, v]) => ({
+        name,
+        attempts: v.attempts,
+        scoreLabel: `${v.score}/${v.total}`,
+        pct: v.total > 0 ? Math.round((v.score / v.total) * 100) : 0
+    })).sort((a, b) => b.pct - a.pct || b.attempts - a.attempts);
+
+    return {
+        attempts,
+        studentSummary,
+        summary: { totalAttempts, totalScore, totalMax, avgPct }
+    };
+}
+
+window.exportSoloResultsExcel = () => {
+    const model = getSoloResultsExportModel();
+    if (model.attempts.length === 0) return window.showMessage("Няма индивидуални резултати за експорт.", "error");
+
+    const wb = XLSX.utils.book_new();
+
+    const summaryRows = [
+        ["ОБЩО ОПИТИ", model.summary.totalAttempts],
+        ["ОБЩ РЕЗУЛТАТ", `${model.summary.totalScore}/${model.summary.totalMax}`],
+        ["СРЕДЕН УСПЕХ", `${model.summary.avgPct}%`],
+        []
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Обобщение");
+
+    const attemptsRows = [
+        ["#", "Ученик", "Урок", "Дата/Час", "Точки", "% Успех"],
+        ...model.attempts.map(r => [r.idx, r.studentName, r.quizTitle, r.dateTime, r.scoreLabel, `${r.pct}%`])
+    ];
+    const wsAttempts = XLSX.utils.aoa_to_sheet(attemptsRows);
+    XLSX.utils.book_append_sheet(wb, wsAttempts, "Индивидуални_Опити");
+
+    const studentRows = [
+        ["Ученик", "Опити", "Точки", "% Успех"],
+        ...model.studentSummary.map(r => [r.name, r.attempts, r.scoreLabel, `${r.pct}%`])
+    ];
+    const wsStudents = XLSX.utils.aoa_to_sheet(studentRows);
+    XLSX.utils.book_append_sheet(wb, wsStudents, "По_Ученици");
+
+    const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
+    XLSX.writeFile(wb, `solo_results_${timestamp}.xlsx`);
+    window.showMessage("Индивидуалният отчет е изтеглен.");
+};
+
+window.exportExcel = () => {
+    const data = getResultsData();
+    if (data.length === 0) return window.showMessage("Няма данни за експорт.", "error");
+
+    const analytics = getClassQuestionStats();
+    const wb = XLSX.utils.book_new();
+
+    const wsResults = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, wsResults, "Резултати");
+
+    const summaryRows = [
+        ["СЕСИЯ", sessionID],
+        ["УЧАСТНИЦИ", analytics.summary?.participantsCount ?? 0],
+        ["ОБЩО ОТГОВОРИ", analytics.summary?.totalAnswered ?? 0],
+        ["ВЕРНИ", `${analytics.summary?.totalCorrect ?? 0} (${analytics.summary?.classCorrectPct ?? 0}%)`],
+        ["ГРЕШНИ", `${analytics.summary?.totalWrong ?? 0} (${analytics.summary?.classWrongPct ?? 0}%)`],
+        []
+    ];
+
+    const questionHeader = ["Въпрос", "Текст", "Верни", "Грешни", "Без отговор", "% Верни", "% Грешни", "Първи верен", "Време (s)"];
+    const questionRows = analytics.rows.map((r) => [
+        r.qIdx + 1,
+        r.questionText,
+        r.correct,
+        r.wrong,
+        r.missing,
+        `${r.correctPct}%`,
+        `${r.wrongPct}%`,
+        r.firstCorrectName,
+        r.firstCorrectSeconds
+    ]);
+    const wsAnalytics = XLSX.utils.aoa_to_sheet([...summaryRows, questionHeader, ...questionRows]);
+    XLSX.utils.book_append_sheet(wb, wsAnalytics, "Анализ_Клас");
+
+    const now = new Date();
+    const timestamp = now.toISOString().slice(0,19).replace(/[-:T]/g,"");
+
+    XLSX.writeFile(wb, `results_${sessionID}_${timestamp}.xlsx`);
+    window.showMessage("Excel файлът е генериран! (вкл. анализ по въпроси)");
+};
+
+const toPdfSafeText = (value) => {
+    const map = {
+        'А':'A','Б':'B','В':'V','Г':'G','Д':'D','Е':'E','Ж':'Zh','З':'Z','И':'I','Й':'Y','К':'K','Л':'L','М':'M','Н':'N','О':'O','П':'P','Р':'R','С':'S','Т':'T','У':'U','Ф':'F','Х':'H','Ц':'Ts','Ч':'Ch','Ш':'Sh','Щ':'Sht','Ъ':'A','Ь':'Y','Ю':'Yu','Я':'Ya',
+        'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sht','ъ':'a','ь':'y','ю':'yu','я':'ya'
+    };
+    return String(value ?? '')
+        .split('')
+        .map(ch => map[ch] || ch)
+        .join('')
+        .replace(/[^ -~]/g, '');
+};
+
+window.exportPDF = () => {
+    const data = getResultsData();
+    if (data.length === 0) return window.showMessage("Няма данни за PDF експорт.", "error");
+
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        return window.showMessage("PDF библиотеката не е заредена.", "error");
+    }
+
+    const analytics = getClassQuestionStats();
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+
+    const [head, ...body] = data;
+    const safeHead = head.map(toPdfSafeText);
+    const safeBody = body.map((row) => row.map(toPdfSafeText));
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(`VideoQuiz - Results for session ${sessionID}`, 40, 40);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`, 40, 58);
+
+    doc.autoTable({
+        head: [safeHead],
+        body: safeBody,
+        startY: 72,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
+        headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [248, 250, 252] }
+    });
+
+    const analyticsHead = [[
+        'Q#', 'Question', 'Correct', 'Wrong', 'No answer', '% Correct', '% Wrong', 'First correct', 'Time (s)'
+    ]];
+    const analyticsBody = analytics.rows.map((r) => [
+        toPdfSafeText(r.qIdx + 1),
+        toPdfSafeText(r.questionText),
+        toPdfSafeText(r.correct),
+        toPdfSafeText(r.wrong),
+        toPdfSafeText(r.missing),
+        toPdfSafeText(`${r.correctPct}%`),
+        toPdfSafeText(`${r.wrongPct}%`),
+        toPdfSafeText(r.firstCorrectName),
+        toPdfSafeText(r.firstCorrectSeconds)
+    ]);
+
+    const nextY = (doc.lastAutoTable?.finalY || 72) + 16;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(toPdfSafeText(`Class accuracy: ${analytics.summary?.classCorrectPct ?? 0}% correct / ${analytics.summary?.classWrongPct ?? 0}% wrong`), 40, nextY);
+
+    doc.autoTable({
+        head: analyticsHead,
+        body: analyticsBody,
+        startY: nextY + 8,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
+        headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [248, 250, 252] }
+    });
+
+    const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
+    doc.save(`results_${sessionID}_${timestamp}.pdf`);
+    window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси).");
+};
+
+// --- STUDENT CLIENT LOGIC ---
+window.joinLiveSession = async () => {
+    const pin = document.getElementById('live-pin').value.trim();
+    studentNameValue = document.getElementById('live-student-name').value.trim();
+    if (!pin || !studentNameValue) return window.showMessage("Име и ПИН са задължителни!", 'error');
+    try {
+        if (!user) await signInAnonymously(auth);
+        const sessionRef = getSessionRefById(pin);
+        sessionID = pin;
+        sessionDocId = pin;
+        const sessionSnap = await getDoc(sessionRef);
+        if (!sessionSnap.exists()) return window.showMessage("Невалиден ПИН код.", 'error');
+
+        const randomAvatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+        window.switchScreen('live-client');
+
+        liveScore = 0;
+        lastAnsweredIdx = -1;
+        document.getElementById('my-avatar-display').innerText = randomAvatar;
+        window.tempLiveSelection = null;
+
+        const uid = auth.currentUser?.uid || "unknown";
+
+        participantStorageMode = 'legacy';
+        const legacyPartRef = getLegacyParticipantRef(uid);
+        const sessionPartRef = getParticipantRef(pin, uid);
+
+        let pSnap = await getDoc(sessionPartRef);
+        let targetRef = sessionPartRef;
+        let found = false;
+
+        if (pSnap.exists()) {
+            found = true;
+            participantStorageMode = 'session';
+        } else {
+            pSnap = await getDoc(legacyPartRef);
+            if (pSnap.exists() && pSnap.data().sessionId === pin) {
+                found = true;
+                targetRef = legacyPartRef;
+                participantStorageMode = 'legacy';
+            }
+        }
+
+        currentParticipantRef = targetRef;
+
+        if (found) {
+            const d = pSnap.data();
+            liveScore = d.score || 0;
+            studentNameValue = d.name;
+            window.showMessage("Върнахте се в сесията!", "info");
+        } else {
+            const participantPayload = {
+                name: studentNameValue, sessionId: pin, avatar: randomAvatar, score: 0,
+                finished: false, lastAnsweredIdx: -1, answers: {}
+            };
+
+            try {
+                targetRef = sessionPartRef;
+                currentParticipantRef = sessionPartRef;
+                participantStorageMode = 'session';
+                await setDoc(sessionPartRef, participantPayload, { merge: true });
+            } catch (writeErr) {
+                if (writeErr?.code !== 'permission-denied') throw writeErr;
+                targetRef = legacyPartRef;
+                currentParticipantRef = legacyPartRef;
+                participantStorageMode = 'legacy';
+                await setDoc(legacyPartRef, participantPayload, { merge: true });
+            }
+        }
+
+        const unsub = onSnapshot(sessionRef, (snap) => {
+            const d = snap.data(); if (!d) return;
+            if (d.status === 'finished') {
+                document.getElementById('client-question').classList.add('hidden');
+                document.getElementById('client-waiting').classList.add('hidden');
+                document.getElementById('client-finished').classList.remove('hidden');
+                const maxPoints = d.totalPoints || '?';
+                document.getElementById('final-score-display').innerText = `${liveScore} / ${maxPoints}`;
+            } else if (d.status === 'active' && d.activeQ !== -1) {
+                if (liveActiveQIdx !== d.activeQ) {
+                    liveActiveQIdx = d.activeQ;
+                    window.currentLiveQ = d.qData;
+                    window.currentLiveQStartedAtMs = (typeof d.qStartedAt?.toMillis === 'function')
+                        ? d.qStartedAt.toMillis()
+                        : (d.qStartedAt?.seconds ? d.qStartedAt.seconds * 1000 : Date.now());
+                    document.getElementById('client-question').classList.remove('hidden');
+                    document.getElementById('client-waiting').classList.add('hidden');
+                    document.getElementById('live-q-text-client').innerText = d.qData.text;
+                    window.renderLiveQuestionUI(d.qData);
+                }
+            } else {
+                document.getElementById('client-question').classList.add('hidden');
+                document.getElementById('client-waiting').classList.remove('hidden');
+                document.getElementById('waiting-status-text').innerText = "Изчакай въпрос...";
+            }
+        }, (error) => {
+            if(error.code === 'permission-denied') window.showRulesHelpModal();
+        });
+        unsubscribes.push(unsub);
+    } catch (e) {
+        console.error(e);
+        if(e.code === 'permission-denied') window.showRulesHelpModal();
+        else window.showMessage("Грешка при свързване.", "error");
+    }
+};
+
+window.selectLiveOption = (el, val) => {
+    document.querySelectorAll('.client-opt-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
+        btn.classList.add('bg-slate-50', 'text-slate-800', 'border-slate-100');
+    });
+    el.classList.remove('bg-slate-50', 'text-slate-800', 'border-slate-100');
+    el.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600');
+
+    window.tempLiveSelection = val;
+
+    const stickyContainer = document.getElementById('sticky-btn-container');
+    stickyContainer.classList.remove('hidden');
+};
+
+window.submitLiveSingleConfirm = () => {
+    if (window.tempLiveSelection === null) return;
+    const isCorrect = window.tempLiveSelection === window.currentLiveQ.correct;
+    window.submitLiveFinal(isCorrect);
+};
+
+window.selectLiveMultiple = () => {
+    const checked = Array.from(document.querySelectorAll('input[name="c-multiple"]:checked'));
+    const stickyContainer = document.getElementById('sticky-btn-container');
+    if (checked.length > 0) {
+        stickyContainer.classList.remove('hidden');
+    } else {
+        stickyContainer.classList.add('hidden');
+    }
+};
+
+window.submitLiveMultipleConfirm = () => {
+    const checked = Array.from(document.querySelectorAll('input[name="c-multiple"]:checked')).map(el => parseInt(el.value));
+    const isCorrect = JSON.stringify(checked.sort()) === JSON.stringify(window.currentLiveQ.correct.sort());
+    window.submitLiveFinal(isCorrect);
+};
+
+window.submitLiveOpenConfirm = () => {
+    const ans = document.getElementById('c-open-answer')?.value.trim().toLowerCase();
+    const isCorrect = ans === window.currentLiveQ.correct;
+    window.submitLiveFinal(isCorrect);
+};
+
+window.submitLiveNumericConfirm = () => {
+    const slider = document.getElementById('c-numeric-slider');
+    if (!slider) return;
+    const answer = parseFloat(slider.value);
+    const q = window.currentLiveQ;
+    const correct = q.correct;
+    const tolerance = q.tolerance || 0;
+    const isCorrect = Math.abs(answer - correct) <= tolerance;
+    window.submitLiveFinal(isCorrect);
+};
+
+window.pickLiveOrder = (el, originalIdx) => {
+    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
+    if (window.userOrderSequence.includes(originalIdx)) return;
+    window.userOrderSequence.push(originalIdx);
+    el.classList.add('opacity-40', 'pointer-events-none');
+    const result = document.getElementById('client-ordering-result');
+    if (result) {
+        const chip = document.createElement('div');
+        chip.className = 'bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-black text-[10px]';
+        chip.innerText = `${window.userOrderSequence.length}. ${el.innerText}`;
+        result.appendChild(chip);
+    }
+    if (window.userOrderSequence.length === window.currentLiveQ.options.length) {
+        document.getElementById('sticky-btn-container')?.classList.remove('hidden');
+    }
+};
+
+// --- TIMELINE (хронология/подреждане) ---
+window.pickLiveTimeline = (el, originalIdx) => {
+    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
+    if (window.userOrderSequence.includes(originalIdx)) return;
+    window.userOrderSequence.push(originalIdx);
+    el.classList.add('opacity-40', 'pointer-events-none');
+    const result = document.getElementById('client-timeline-result');
+    if (result) {
+        const chip = document.createElement('div');
+        chip.className = 'bg-amber-600 text-white px-3 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1';
+        chip.innerHTML = `<i data-lucide="clock" class="w-3 h-3"></i> ${window.userOrderSequence.length}. ${el.innerText}`;
+        result.appendChild(chip);
+        if (window.lucide) lucide.createIcons();
+    }
+    if (window.userOrderSequence.length === window.currentLiveQ.options.length) {
+        document.getElementById('sticky-btn-container')?.classList.remove('hidden');
+    }
+};
+
+window.clearLiveTimeline = () => {
+    window.userOrderSequence = [];
+    const result = document.getElementById('client-timeline-result');
+    if (result) result.innerHTML = '';
+    document.querySelectorAll('.client-timeline-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
+    document.getElementById('sticky-btn-container')?.classList.add('hidden');
+};
+
+window.submitLiveTimelineConfirm = () => {
+    const q = window.currentLiveQ;
+    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) {
+        return window.showMessage('Подредете всички събития!', 'error');
+    }
+    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
+    window.submitLiveFinal(isCorrect);
+};
+
+window.clearLiveOrdering = () => {
+    window.userOrderSequence = [];
+    const result = document.getElementById('client-ordering-result');
+    if (result) result.innerHTML = '';
+    document.querySelectorAll('.client-order-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
+    document.getElementById('sticky-btn-container')?.classList.add('hidden');
+};
+
+window.submitLiveOrderingConfirm = () => {
+    const q = window.currentLiveQ;
+    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) {
+        return window.showMessage('Подредете всички елементи!', 'error');
+    }
+    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
+    window.submitLiveFinal(isCorrect);
+};
+
+// --- RENDER LIVE QUESTION UI ---
+window.renderLiveQuestionUI = (q) => {
+    const container = document.getElementById('live-options-client');
+    container.innerHTML = '';
+    window.tempLiveSelection = null;
+    window.userOrderSequence = [];
+
+    let btnHtml = `
+    <div class="h-28"></div>
+    <div id="sticky-btn-container" class="fixed bottom-0 left-0 w-full p-4 bg-white/90 backdrop-blur-md border-t border-indigo-100 z-50 hidden animate-pop pb-6 sm:pb-4">
+        <button id="btn-submit-live-unified" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-lg shadow-xl shadow-indigo-200 transform active:scale-95 transition-all">ИЗПРАТИ</button>
+    </div>`;
+
+    if (q.type === 'single') {
+        container.innerHTML = q.options.map((o, i) => `
+            <button onclick="window.selectLiveOption(this, ${i})" class="client-opt-btn w-full p-4 text-left bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 shadow-sm hover:border-indigo-300 transition-all text-sm mb-2">${o}</button>
+        `).join('') + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveSingleConfirm;
+    } else if (q.type === 'multiple') {
+        container.innerHTML = q.options.map((o, i) => `
+            <label class="flex items-center gap-4 w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 cursor-pointer text-sm mb-2">
+                <input type="checkbox" name="c-multiple" value="${i}" class="w-6 h-6" onchange="window.selectLiveMultiple()"> ${o}
+            </label>
+        `).join('') + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveMultipleConfirm;
+    } else if (q.type === 'boolean') {
+        container.innerHTML = `
+         <div class="grid grid-cols-2 gap-4">
+            <button onclick="window.selectLiveOption(this, true)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-emerald-600 text-xl">ДА</button>
+            <button onclick="window.selectLiveOption(this, false)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-rose-600 text-xl">НЕ</button>
+         </div>` + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveSingleConfirm;
+    } else if (q.type === 'open') {
+        container.innerHTML = `<input type="text" id="c-open-answer" placeholder="Напишете отговор..." class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-base outline-none text-center mb-4">` + btnHtml;
+        document.getElementById('sticky-btn-container').classList.remove('hidden');
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOpenConfirm;
+    } else if (q.type === 'ordering') {
+        const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
+        container.innerHTML = `
+            <div id="client-ordering-pool" class="grid grid-cols-1 gap-2 mb-4">${shuffled.map(item => `<button onclick="window.pickLiveOrder(this, ${item.i})" class="client-order-item w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 text-sm">${item.o}</button>`).join('')}</div>
+            <div id="client-ordering-result" class="flex flex-wrap justify-center gap-2 mb-4 min-h-[40px] border-t pt-4"></div>
+            <button type="button" onclick="window.clearLiveOrdering()" class="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] mb-2">Изчисти</button>
+        ` + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOrderingConfirm;
+    } else if (q.type === 'timeline') {
+        const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
+        container.innerHTML = `
+            <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 font-black text-xs flex items-center gap-2">
+                <i data-lucide="clock" class="w-4 h-4"></i> Подредете събитията в хронологичен ред
+            </div>
+            <div id="client-timeline-pool" class="grid grid-cols-1 gap-2 mb-4">${shuffled.map(item => `<button onclick="window.pickLiveTimeline(this, ${item.i})" class="client-timeline-item w-full p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl font-black text-amber-800 text-sm hover:bg-amber-100 transition-all">${item.o}</button>`).join('')}</div>
+            <div id="client-timeline-result" class="flex flex-wrap justify-center gap-2 mb-4 min-h-[40px] border-t border-amber-200 pt-4"></div>
+            <button type="button" onclick="window.clearLiveTimeline()" class="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] mb-2">Изчисти хронологията</button>
+        ` + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveTimelineConfirm;
+        if (window.lucide) lucide.createIcons();
+    } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
+        const defaultValue = (q.min + q.max) / 2;
+        const isTimeline = (q.type === 'timeline-slider') || (q.timelineMode === true);
+        
+        let sliderHtml = '';
+        if (isTimeline) {
+            // Хронологичен плъзгач (timeline slider)
+            const years = [];
+            const step = Math.max(1, Math.ceil((q.max - q.min) / 5));
+            for (let y = q.min; y <= q.max; y += step) {
+                years.push(Math.round(y));
+            }
+            if (years[years.length-1] < q.max) years.push(Math.round(q.max));
+            
+            sliderHtml = `
+                <div class="relative pt-6 pb-2">
+                    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-300 via-amber-500 to-amber-700 rounded-full"></div>
+                    <div class="flex justify-between text-[10px] font-bold text-amber-700 px-1">
+                        ${years.map(y => `<span>${y}</span>`).join('')}
+                    </div>
+                    <input type="range" id="c-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" 
+                        class="w-full h-2 bg-transparent accent-amber-500 appearance-none cursor-pointer mt-2">
+                    <div class="flex justify-between text-slate-800 text-sm font-bold mt-2">
+                        <span>${q.min}</span>
+                        <span id="c-numeric-value" class="bg-amber-600 text-white px-6 py-2 rounded-full font-black shadow-lg">${defaultValue}</span>
+                        <span>${q.max}</span>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Обикновен числов слайдер
+            sliderHtml = `
+                <div class="space-y-6">
+                    <input type="range" id="c-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" class="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                    <div class="flex justify-between text-slate-800 text-sm font-bold">
+                        <span>${q.min}</span>
+                        <span id="c-numeric-value" class="bg-indigo-100 px-4 py-2 rounded-full font-black">${defaultValue}</span>
+                        <span>${q.max}</span>
+                    </div>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = sliderHtml + btnHtml;
+        
+        const slider = document.getElementById('c-numeric-slider');
+        const display = document.getElementById('c-numeric-value');
+        slider.addEventListener('input', () => {
+            display.innerText = slider.value;
+        });
+        
+        document.getElementById('sticky-btn-container').classList.remove('hidden');
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveNumericConfirm;
+    }
+};
+
+window.submitLiveFinal = async (isCorrect) => {
+    if (!user || lastAnsweredIdx === liveActiveQIdx) return;
+    lastAnsweredIdx = liveActiveQIdx;
+    liveScore += isCorrect ? (window.currentLiveQ.points || 1) : 0;
+
+    document.getElementById('client-question').classList.add('hidden');
+    document.getElementById('client-waiting').classList.remove('hidden');
+    document.getElementById('waiting-status-text').innerHTML = `
+        <div class="flex flex-col items-center gap-4">
+            <div class="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <span>Изпращане на отговор...</span>
+        </div>
+    `;
+
+    const updatePayload = {
+        score: liveScore,
+        lastAnsweredIdx: liveActiveQIdx,
+        lastResult: isCorrect
+    };
+    const reactionMs = window.currentLiveQStartedAtMs ? Math.max(0, Date.now() - window.currentLiveQStartedAtMs) : null;
+    updatePayload[`answers.${liveActiveQIdx}`] = isCorrect;
+    if (reactionMs !== null) updatePayload[`reactionMs.${liveActiveQIdx}`] = reactionMs;
+
+    try {
+        if (currentParticipantRef) {
+            await updateDoc(currentParticipantRef, updatePayload);
+            document.getElementById('waiting-status-text').innerText = isCorrect ? "ВЕРЕН ОТГОВОР! ✨" : "ГРЕШЕН ОТГОВОР... ❌";
+        }
+    } catch (e) {
+        console.error(e);
+        document.getElementById('waiting-status-text').innerText = "Грешка при изпращане!";
+        setTimeout(() => window.submitLiveFinal(isCorrect), 2000);
+    }
+};
+
+const stopSpeechReader = () => {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+};
+
+const readQuestionWithSpeech = (text) => {
+    if (!sopModeEnabled || !('speechSynthesis' in window)) return;
+    try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'bg-BG';
+        u.rate = 0.9;
+        u.pitch = 1;
+        window.speechSynthesis.speak(u);
+    } catch (e) {
+        console.error('Speech reader failed:', e);
+    }
+};
+
+// --- SOLO LOGIC ---
+window.startIndividual = async () => {
+    const pinCode = document.getElementById('ind-quiz-code').value.trim();
+    const decoded = window.decodeQuizCode(pinCode);
+    if (!decoded) return window.showMessage("Невалиден код на урок.", 'error');
+    isDiscussionMode = !!document.getElementById('ind-discussion-mode')?.checked;
+    sopModeEnabled = !!document.getElementById('ind-sop-mode')?.checked;
+    const name = isDiscussionMode ? "Обсъждане" : prompt("Вашето име:");
+    if (!name) return;
+    studentNameValue = name; currentQuiz = decoded;
+    currentQuizOwnerId = await window.resolveTeacherUidFromCode(decoded);
+    if (!currentQuizOwnerId) {
+        return window.showMessage("Кодът не е свързан еднозначно с учител. Генерирайте нов код от профила на учителя.", 'error');
+    }
+
+    if (!auth.currentUser) {
+        try {
+            await signInAnonymously(auth);
+        } catch(e) { console.error("Auto-login failed", e); }
+    }
+
+    window.switchScreen('solve');
+    scoreCount = 0; currentQIndex = -1; soloGameFinished = false;
+    window.initSolvePlayer();
+};
+
+window.initSolvePlayer = () => {
+    if (!window.YT || !window.YT.Player) {
+        window.showMessage("Изчакайте YouTube API...", "error");
+        setTimeout(window.initSolvePlayer, 1000);
+        return;
+    }
+    document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
+    solvePlayer = new YT.Player('solve-player', {
+        videoId: currentQuiz.v, width: '100%', height: '100%',
+        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1 },
+        events: { 'onStateChange': (e) => {
+            if (e.data === YT.PlayerState.ENDED) {
+                window.finishSoloGame();
+            }
+            if (e.data === YT.PlayerState.PLAYING) {
+                const m = setInterval(() => {
+                    if (!solvePlayer?.getCurrentTime) return;
+                    const cur = Math.floor(solvePlayer.getCurrentTime());
+                    const duration = solvePlayer.getDuration();
+
+                    const qIdx = currentQuiz.q.findIndex((q, i) => cur >= q.time && i > currentQIndex);
+                    if (qIdx !== -1) {
+                        currentQIndex = qIdx;
+                        window.triggerSoloQuestion(currentQuiz.q[qIdx]);
+                    }
+
+                    if (duration > 0 && cur >= duration - 1) {
+                        clearInterval(m);
+                        window.finishSoloGame();
+                    }
+                }, 500);
+                activeIntervals.push(m);
+            }
+        }}
+    });
+};
+
+window.triggerSoloQuestion = (q) => {
+    solvePlayer?.pauseVideo();
+    const overlay = document.getElementById('ind-overlay');
+    overlay.classList.remove('hidden'); overlay.classList.add('flex');
+    const questionEl = document.getElementById('ind-overlay-q-text');
+    questionEl.innerText = q.text;
+    questionEl.classList.toggle('text-3xl', sopModeEnabled);
+    questionEl.classList.toggle('sm:text-6xl', sopModeEnabled);
+    questionEl.classList.toggle('text-xl', !sopModeEnabled);
+    questionEl.classList.toggle('sm:text-4xl', !sopModeEnabled);
+    readQuestionWithSpeech(q.text);
+    const container = document.getElementById('ind-overlay-options');
+    container.innerHTML = '';
+
+    if (q.type === 'single') {
+        container.innerHTML = q.options.map((o, i) => `<button onclick="window.submitSolo(${i})" class="w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white hover:bg-white/20 transition-all text-sm">${o}</button>`).join('');
+    } else if (q.type === 'multiple') {
+        container.innerHTML = q.options.map((o, i) => `<label class="flex items-center gap-4 w-full p-4 bg-white/10 border border-white/20 rounded-2xl font-black text-white cursor-pointer text-sm mb-2"><input type="checkbox" name="s-multiple" value="${i}" class="w-5 h-5"> ${o}</label>`).join('') + `<button onclick="window.submitSoloMultiple()" class="w-full mt-4 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>`;
+    } else if (q.type === 'boolean') {
+        container.innerHTML = `<div class="grid grid-cols-2 gap-4"><button onclick="window.submitSolo(true)" class="p-10 bg-emerald-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">ДА</button><button onclick="window.submitSolo(false)" class="p-10 bg-rose-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">НЕ</button></div>`;
+    } else if (q.type === 'open') {
+        container.innerHTML = `<input type="text" id="s-open-answer" placeholder="Отговор..." class="w-full p-6 bg-white/10 border border-white/20 rounded-2xl font-black text-white text-xl outline-none mb-4 text-center"><button onclick="window.submitSoloOpen()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>`;
+    } else if (q.type === 'ordering') {
+        window.userOrderSequence = [];
+        const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
+        container.innerHTML = `
+            <div id="solo-ordering-pool" class="space-y-2">${shuffled.map(item => `<button onclick="window.pickSoloOrder(this, ${item.i})" class="solo-order-item w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white">${item.o}</button>`).join('')}</div>
+            <div id="solo-ordering-result" class="min-h-[48px] border-t border-white/20 mt-4 pt-4 flex flex-wrap gap-2"></div>
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="window.clearSoloOrdering()" class="py-3 bg-slate-600 rounded-xl font-black text-xs">Изчисти</button>
+                <button onclick="window.submitSoloOrdering()" class="py-3 bg-indigo-600 rounded-xl font-black text-xs">Изпрати</button>
+            </div>`;
+    } else if (q.type === 'timeline') {
+        window.userOrderSequence = [];
+        const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
+        container.innerHTML = `
+            <div class="mb-4 p-3 bg-amber-500/20 border border-amber-400 rounded-xl text-amber-200 font-black text-xs flex items-center gap-2">
+                <i data-lucide="clock" class="w-4 h-4"></i> Подредете събитията в хронологичен ред
+            </div>
+            <div id="solo-timeline-pool" class="space-y-2">${shuffled.map(item => `<button onclick="window.pickSoloTimeline(this, ${item.i})" class="solo-timeline-item w-full p-4 text-left bg-amber-500/10 border border-amber-400/30 rounded-2xl font-black text-amber-100 hover:bg-amber-500/20 transition-all">${item.o}</button>`).join('')}</div>
+            <div id="solo-timeline-result" class="min-h-[48px] border-t border-amber-400/30 mt-4 pt-4 flex flex-wrap gap-2"></div>
+            <div class="grid grid-cols-2 gap-3 mt-4">
+                <button onclick="window.clearSoloTimeline()" class="py-3 bg-slate-600 rounded-xl font-black text-xs">Изчисти</button>
+                <button onclick="window.submitSoloTimeline()" class="py-3 bg-amber-600 rounded-xl font-black text-xs">Изпрати</button>
+            </div>
+        `;
+        if (window.lucide) lucide.createIcons();
+    } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
+        const defaultValue = (q.min + q.max) / 2;
+        const isTimeline = (q.type === 'timeline-slider') || (q.timelineMode === true);
+        
+        let sliderHtml = '';
+        if (isTimeline) {
+            // Хронологичен плъзгач
+            const years = [];
+            const step = Math.max(1, Math.ceil((q.max - q.min) / 5));
+            for (let y = q.min; y <= q.max; y += step) {
+                years.push(Math.round(y));
+            }
+            if (years[years.length-1] < q.max) years.push(Math.round(q.max));
+            
+            sliderHtml = `
+                <div class="relative pt-6 pb-2">
+                    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-300 via-amber-500 to-amber-700 rounded-full"></div>
+                    <div class="flex justify-between text-[10px] font-bold text-amber-200 px-1">
+                        ${years.map(y => `<span>${y}</span>`).join('')}
+                    </div>
+                    <input type="range" id="s-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" 
+                        class="w-full h-2 bg-transparent accent-amber-500 appearance-none cursor-pointer mt-2">
+                    <div class="flex justify-between text-white text-sm font-bold mt-2">
+                        <span>${q.min}</span>
+                        <span id="s-numeric-value" class="bg-amber-600 px-6 py-2 rounded-full font-black shadow-lg">${defaultValue}</span>
+                        <span>${q.max}</span>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Обикновен числов слайдер
+            sliderHtml = `
+                <div class="space-y-6">
+                    <input type="range" id="s-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" class="w-full h-3 bg-white/20 rounded-lg appearance-none cursor-pointer">
+                    <div class="flex justify-between text-white text-sm font-bold">
+                        <span>${q.min}</span>
+                        <span id="s-numeric-value" class="bg-indigo-600 px-4 py-2 rounded-full font-black">${defaultValue}</span>
+                        <span>${q.max}</span>
+                    </div>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = sliderHtml + `
+            <button onclick="window.submitSoloNumeric()" class="w-full mt-6 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>
+        `;
+        
+        const slider = document.getElementById('s-numeric-slider');
+        const display = document.getElementById('s-numeric-value');
+        slider.addEventListener('input', () => {
+            display.innerText = slider.value;
+        });
+    }
+};
+
+// --- SOLO HELPER FUNCTIONS ---
+window.submitSoloNumeric = () => {
+    const slider = document.getElementById('s-numeric-slider');
+    if (!slider) return;
+    const answer = parseFloat(slider.value);
+    const q = currentQuiz.q[currentQIndex];
+    const correct = q.correct;
+    const tolerance = q.tolerance || 0;
+    const isCorrect = Math.abs(answer - correct) <= tolerance;
+    window.submitSoloFinal(isCorrect);
+};
+
+window.submitSoloFinal = (isCorrect) => {
+    if (isCorrect) scoreCount += (currentQuiz.q[currentQIndex].points || 1);
+    stopSpeechReader();
+    document.getElementById('ind-overlay').classList.add('hidden');
+    document.getElementById('ind-overlay').classList.remove('flex');
+    setTimeout(() => { solvePlayer?.playVideo(); }, 500);
+};
+
+window.submitSoloMultiple = () => {
+    const checked = Array.from(document.querySelectorAll('input[name="s-multiple"]:checked')).map(el => parseInt(el.value));
+    const isCorrect = JSON.stringify(checked.sort()) === JSON.stringify(currentQuiz.q[currentQIndex].correct.sort());
+    window.submitSoloFinal(isCorrect);
+};
+
+window.submitSoloOpen = () => {
+    const ans = document.getElementById('s-open-answer')?.value.trim().toLowerCase();
+    window.submitSoloFinal(ans === currentQuiz.q[currentQIndex].correct);
+};
+
+window.submitSolo = (v) => window.submitSoloFinal(v === currentQuiz.q[currentQIndex].correct);
+
+window.submitSoloOrdering = () => {
+    const q = currentQuiz.q[currentQIndex];
+    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) return window.showMessage('Подредете всички елементи!', 'error');
+    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
+    window.submitSoloFinal(isCorrect);
+};
+
+window.pickSoloOrder = (el, originalIdx) => {
+    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
+    if (window.userOrderSequence.includes(originalIdx)) return;
+    window.userOrderSequence.push(originalIdx);
+    el.classList.add('opacity-40', 'pointer-events-none');
+    const result = document.getElementById('solo-ordering-result');
+    if (result) {
+        const chip = document.createElement('div');
+        chip.className = 'px-3 py-1 rounded-lg bg-indigo-600 text-white text-xs font-black';
+        chip.innerText = `${window.userOrderSequence.length}. ${el.innerText}`;
+        result.appendChild(chip);
+    }
+};
+
+window.clearSoloOrdering = () => {
+    window.userOrderSequence = [];
+    const result = document.getElementById('solo-ordering-result');
+    if (result) result.innerHTML = '';
+    document.querySelectorAll('.solo-order-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
+};
+
+// --- TIMELINE SOLO FUNCTIONS ---
+window.pickSoloTimeline = (el, originalIdx) => {
+    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
+    if (window.userOrderSequence.includes(originalIdx)) return;
+    window.userOrderSequence.push(originalIdx);
+    el.classList.add('opacity-40', 'pointer-events-none');
+    const result = document.getElementById('solo-timeline-result');
+    if (result) {
+        const chip = document.createElement('div');
+        chip.className = 'px-3 py-1 rounded-lg bg-amber-600 text-white text-xs font-black flex items-center gap-1';
+        chip.innerHTML = `<i data-lucide="clock" class="w-3 h-3"></i> ${window.userOrderSequence.length}. ${el.innerText}`;
+        result.appendChild(chip);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+window.clearSoloTimeline = () => {
+    window.userOrderSequence = [];
+    const result = document.getElementById('solo-timeline-result');
+    if (result) result.innerHTML = '';
+    document.querySelectorAll('.solo-timeline-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
+};
+
+window.submitSoloTimeline = () => {
+    const q = currentQuiz.q[currentQIndex];
+    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) {
+        return window.showMessage('Подредете всички събития!', 'error');
+    }
+    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
+    window.submitSoloFinal(isCorrect);
+};
+
+window.finishSoloGame = async () => {
+    if (soloGameFinished) return;
+    soloGameFinished = true;
+
+    stopSpeechReader();
+    window.switchScreen('finish');
+    const totalPossible = currentQuiz.q.reduce((acc, q) => acc + (q.points || 1), 0);
+    const scoreText = `${scoreCount} / ${totalPossible}`;
+    const finalScoreEl = document.getElementById('res-score');
+    if (finalScoreEl) finalScoreEl.innerText = scoreText;
+
+    const currentUser = auth.currentUser || user;
+    if (isDiscussionMode) {
+        window.showMessage("Режим обсъждане: резултатът не се записва в облака.", "info");
+        return;
+    }
+    if (currentUser) {
+        const resId = `${currentUser.uid}_${currentQuiz.v.replace(/[^a-zA-Z0-9]/g, '')}_${Date.now()}`;
+        if (!currentQuizOwnerId) {
+            window.showMessage("Кодът няма валиден собственик (учител). Резултатът не е записан.", "error");
+            return;
+        }
+        try {
+            await setDoc(doc(getTeacherSoloResultsCollection(currentQuizOwnerId), resId), {
+                studentName: studentNameValue,
+                quizTitle: currentQuiz.title || "Индивидуален тест",
+                score: scoreText,
+                timestamp: serverTimestamp(),
+                userId: currentUser.uid,
+                teacherOwnerId: currentQuizOwnerId,
+                teacherOwnerEmail: currentQuiz.ownerEmail || currentQuiz.teacherEmail || null
+            });
+        } catch(e) {
+            if(e.code === 'permission-denied') window.showRulesHelpModal();
+        }
+    }
+};
+
+// --- EDITOR ENGINE (вече поправен) ---
+window.loadEditorVideo = (isEdit = false) => {
+    const url = document.getElementById('yt-url')?.value;
+    const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
+    if (!id) return window.showMessage("Невалиден линк.", "error");
+
+    if (!window.YT || !window.YT.Player) {
+        window.showMessage("Изчакайте YouTube API...", "error");
+        setTimeout(() => window.loadEditorVideo(isEdit), 1000);
+        return;
+    }
+
+    currentVideoId = id;
+    document.getElementById('editor-view').classList.remove('hidden');
+    document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
+    player = new YT.Player('player', { videoId: id, events: { 'onReady': () => {
+        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
+        activeIntervals.push(i);
+    }}});
+    if (!isEdit) { questions = []; editingQuizId = null; }
+    renderEditorList();
+};
+
+window.openQuestionModal = () => {
+    if (!player || typeof player.getCurrentTime !== 'function') return window.showMessage("Заредете видео!", "error");
+    editingQuestionIndex = null;
+    document.getElementById('m-title-text').innerText = "Нов въпрос";
+    document.getElementById('m-text').value = '';
+    document.getElementById('modal-q').classList.remove('hidden');
+    document.getElementById('modal-q').classList.add('flex');
+    document.getElementById('m-time').innerText = window.formatTime(player.getCurrentTime());
+    window.updateModalFields();
+};
+
+window.addQuestionOptionRow = (value = '', checked = false) => {
+    const type = document.getElementById('m-type').value;
+    const list = document.getElementById('m-opts-list');
+    if (!list) return;
+    const inputType = type === 'single' ? 'radio' : (type === 'multiple' ? 'checkbox' : 'hidden');
+    const row = document.createElement('div');
+    row.className = 'option-row flex items-center gap-2 mb-2 bg-slate-50 p-3 rounded-2xl border';
+    row.innerHTML = `
+        <input type="${inputType}" name="m-correct" class="w-5 h-5 ${type === 'ordering' || type === 'timeline' ? 'hidden' : ''}" ${checked ? 'checked' : ''}>
+        <input type="text" value="${value}" placeholder="Текст на отговор" class="option-input flex-1 bg-transparent font-black outline-none text-xs sm:text-sm">
+        <button type="button" onclick="this.closest('.option-row')?.remove()" class="text-rose-500 text-xs font-black px-2">✕</button>
+    `;
+    list.appendChild(row);
+};
+
+window.updateModalFields = () => {
+    const type = document.getElementById('m-type').value;
+    const container = document.getElementById('m-opts-container');
+    container.innerHTML = '';
+
+    if (type === 'single' || type === 'multiple' || type === 'ordering' || type === 'timeline') {
+        container.innerHTML = `
+            <div id="m-opts-list"></div>
+            <button type="button" onclick="window.addQuestionOptionRow()" class="w-full py-3 border-2 border-dashed rounded-2xl text-[10px] font-black uppercase text-slate-400 mt-2">+ Добави отговор</button>
+        `;
+        window.addQuestionOptionRow();
+        window.addQuestionOptionRow();
+    } else if (type === 'boolean') {
+        container.innerHTML = `<div class="grid grid-cols-2 gap-4 mt-2"><label class="flex items-center justify-center gap-4 p-4 bg-slate-50 rounded-2xl border font-black cursor-pointer"><input type="radio" name="m-correct" value="true" checked> ДА</label><label class="flex items-center justify-center gap-4 p-4 bg-slate-50 rounded-2xl border font-black cursor-pointer"><input type="radio" name="m-correct" value="false"> НЕ</label></div>`;
+    } else if (type === 'open') {
+        container.innerHTML = `<input type="text" id="m-open-correct" placeholder="Верен отговор..." class="w-full p-4 bg-slate-50 rounded-2xl border font-black outline-none text-sm">`;
+    } else if (type === 'numeric' || type === 'timeline-slider') {
+        container.innerHTML = `
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Мин. стойност</label>
+                        <input type="number" id="m-numeric-min" value="0" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Макс. стойност</label>
+                        <input type="number" id="m-numeric-max" value="100" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Стъпка</label>
+                        <input type="number" id="m-numeric-step" value="1" min="0.1" step="any" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Точен отговор</label>
+                        <input type="number" id="m-numeric-correct" value="50" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase">Толеранс (±)</label>
+                    <input type="number" id="m-numeric-tolerance" value="0" min="0" step="any" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    <p class="text-[9px] text-slate-400 mt-1">Ако толерансът е 2, то отговор 48-52 е верен.</p>
+                </div>
+            </div>
+        `;
+    }
+};
+
+window.saveQuestion = () => {
+    const text = document.getElementById('m-text').value.trim();
+    const type = document.getElementById('m-type').value;
+    if (!text) return window.showMessage("Въведете текст!", "error");
+    let timeVal = editingQuestionIndex !== null ? questions[editingQuestionIndex].time : Math.floor(player.getCurrentTime());
+    let qData = { time: timeVal, text, type, points: parseInt(document.getElementById('m-points').value) || 1 };
+
+    if (type === 'single' || type === 'multiple' || type === 'ordering' || type === 'timeline') {
+        const rows = Array.from(document.querySelectorAll('#m-opts-list .option-row'));
+        const entries = rows.map((row) => ({
+            text: row.querySelector('.option-input')?.value.trim() || '',
+            checked: !!row.querySelector('input[name="m-correct"]')?.checked
+        })).filter((e) => e.text);
+        if (entries.length < 2) return window.showMessage("Добавете поне 2 отговора!", "error");
+        qData.options = entries.map((e) => e.text);
+
+        if (type === 'single' || type === 'multiple') {
+            const correct = [];
+            entries.forEach((entry, idx) => {
+                if (entry.checked) correct.push(idx);
+            });
+            if (correct.length === 0) return window.showMessage("Маркирайте верен отговор!", "error");
+            if (type === 'single') qData.correct = correct[0];
+            else qData.correct = correct;
+        } else {
+            qData.correct = qData.options.map((_, i) => i);
+        }
+    } else if (type === 'boolean') {
+        qData.correct = document.querySelector('input[name="m-correct"]:checked').value === 'true';
+    } else if (type === 'open') {
+        qData.correct = document.getElementById('m-open-correct')?.value.trim().toLowerCase();
+    } else if (type === 'numeric' || type === 'timeline-slider') {
+        const minInput = document.getElementById('m-numeric-min');
+        const maxInput = document.getElementById('m-numeric-max');
+        const stepInput = document.getElementById('m-numeric-step');
+        const correctInput = document.getElementById('m-numeric-correct');
+        const toleranceInput = document.getElementById('m-numeric-tolerance');
+        
+        if (!minInput || !maxInput || !stepInput || !correctInput || !toleranceInput) {
+            console.error('Numeric fields not found!');
+            return window.showMessage("Грешка: Полетата не са заредени!", "error");
+        }
+        
+        const min = parseFloat(minInput.value);
+        const max = parseFloat(maxInput.value);
+        const step = parseFloat(stepInput.value);
+        const correct = parseFloat(correctInput.value);
+        const tolerance = parseFloat(toleranceInput.value) || 0;
+        
+        if (isNaN(min) || isNaN(max) || isNaN(step) || isNaN(correct)) {
+            return window.showMessage("Моля, попълнете всички полета с валидни числа!", "error");
+        }
+        
+        if (min >= max) {
+            return window.showMessage("Максималната стойност трябва да е по-голяма от минималната!", "error");
+        }
+        
+        if (correct < min || correct > max) {
+            return window.showMessage("Точният отговор трябва да е между минималната и максималната стойност!", "error");
+        }
+
+        qData.min = min;
+        qData.max = max;
+        qData.step = step;
+        qData.correct = correct;
+        qData.tolerance = tolerance;
+    }
+
+    if (editingQuestionIndex !== null) {
+        questions[editingQuestionIndex] = qData;
+    } else {
+        questions.push(qData);
+    }
+    questions.sort((a,b) => a.time - b.time);
+    renderEditorList();
+    document.getElementById('modal-q').classList.add('hidden');
+    editingQuestionIndex = null;
+};
+
+window.editQuestionContent = (index) => {
+    const q = questions[index];
+    editingQuestionIndex = index;
+    document.getElementById('m-title-text').innerText = "Редактиране";
+    document.getElementById('m-text').value = q.text;
+    document.getElementById('m-type').value = q.type;
+    document.getElementById('m-points').value = q.points || 1;
+    document.getElementById('m-time').innerText = window.formatTime(q.time);
+    document.getElementById('modal-q').classList.remove('hidden');
+    document.getElementById('modal-q').classList.add('flex');
+    
+    window.updateModalFields();
+    
+    if (q.type === 'single' || q.type === 'multiple' || q.type === 'ordering' || q.type === 'timeline') {
+        const list = document.getElementById('m-opts-list');
+        if (list) list.innerHTML = '';
+        (q.options || []).forEach((opt, i) => {
+            const corrects = Array.isArray(q.correct) ? q.correct : [q.correct];
+            const checked = (q.type === 'single' || q.type === 'multiple') && corrects.includes(i);
+            window.addQuestionOptionRow(opt, checked);
+        });
+    } else if (q.type === 'boolean') {
+        const boolInput = document.querySelector(`input[name="m-correct"][value="${q.correct}"]`);
+        if (boolInput) boolInput.checked = true;
+    } else if (q.type === 'open') {
+        const openCorrect = document.getElementById('m-open-correct');
+        if (openCorrect) openCorrect.value = q.correct || '';
+    } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
+        setTimeout(() => {
+            const minInput = document.getElementById('m-numeric-min');
+            const maxInput = document.getElementById('m-numeric-max');
+            const stepInput = document.getElementById('m-numeric-step');
+            const correctInput = document.getElementById('m-numeric-correct');
+            const toleranceInput = document.getElementById('m-numeric-tolerance');
+            
+            if (minInput) minInput.value = q.min ?? 0;
+            if (maxInput) maxInput.value = q.max ?? 100;
+            if (stepInput) stepInput.value = q.step ?? 1;
+            if (correctInput) correctInput.value = q.correct ?? 50;
+            if (toleranceInput) toleranceInput.value = q.tolerance ?? 0;
+        }, 50);
+    }
+};
+
+function renderEditorList() {
+    const list = document.getElementById('q-list'); if (!list) return;
+    list.innerHTML = questions.map((q, i) => `
+        <div class="p-3 bg-white rounded-xl mb-2 flex flex-col gap-2 border shadow-sm">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-1">
+                    <button onclick="window.adjustTime(${i}, -1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">-</button>
+                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${window.formatTime(q.time)}</span>
+                    <button onclick="window.adjustTime(${i}, 1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">+</button>
+                </div>
+                <div class="flex gap-1">
+                    <button onclick="window.editQuestionContent(${i})" title="Текст" class="text-indigo-400 p-1 hover:text-indigo-600"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                    <button onclick="window.deleteEditorQuestion(${i})" title="Изтрий" class="text-rose-400 p-1 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            </div>
+            <div class="text-slate-700 font-black text-xs truncate border-t pt-2 mt-1 opacity-80">${q.text}</div>
+            <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                ${q.type === 'numeric' ? '🔢 Числов отговор' : ''}
+                ${q.type === 'timeline-slider' ? '📅 Хронологичен плъзгач' : ''}
+                ${q.type === 'timeline' ? '📅 Хронология (подреждане)' : ''}
+                ${q.type === 'single' ? '✅ Един верен' : ''}
+                ${q.type === 'multiple' ? '🔀 Множество верни' : ''}
+                ${q.type === 'boolean' ? '✓✓ Вярно/Невярно' : ''}
+                ${q.type === 'open' ? '✏️ Отворен отговор' : ''}
+                ${q.type === 'ordering' ? '↕️ Подреждане' : ''}
+            </div>
+        </div>
+    `).join('') || '<p class="text-center text-slate-300 italic py-6 text-xs">Добавете въпроси.</p>';
+    if (window.lucide) lucide.createIcons();
+}
+
+window.adjustTime = (index, delta) => {
+    questions[index].time = Math.max(0, questions[index].time + delta);
+    questions.sort((a,b) => a.time - b.time);
+    renderEditorList();
+    if (player && typeof player.seekTo === 'function') player.seekTo(questions[index].time, true);
+};
+
+window.deleteEditorQuestion = (i) => { if (confirm("Изтриване на въпроса?")) { questions.splice(i,1); renderEditorList(); } };
+
+window.saveQuizToLibrary = async () => {
+    if (!user) return;
+    let title = "";
+    const existing = editingQuizId ? myQuizzes.find(x => x.id === editingQuizId) : null;
+    title = prompt("Име на урока:", existing?.title || "");
+    if (title === null) return;
+    if (!title) title = existing?.title || "Без име";
+    window.showMessage("Записване...");
+    try {
+        const data = { title, v: currentVideoId, questions, updatedAt: serverTimestamp() };
+        if (!editingQuizId) data.createdAt = serverTimestamp();
+        if (editingQuizId) await updateDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', editingQuizId), data);
+        else await addDoc(collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes'), data);
+        window.showMessage("Урокът е запазен!", "info");
+        editingQuizId = null;
+        window.switchScreen('teacher-dashboard');
+    } catch (e) {
+        if (e.code === 'permission-denied') window.showRulesHelpModal();
+        else window.showMessage("Грешка при запис!", "error");
+    }
+};
+
+window.showShareCode = (id) => {
+    const q = myQuizzes.find(x => x.id === id);
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify({
+        v: q.v,
+        q: q.questions,
+        title: q.title,
+        ownerId: user?.uid || null,
+        teacherId: user?.uid || null,
+        ownerEmail: user?.email || null,
+        ownerEmailNormalized: user?.email?.toLowerCase?.() || null
+    }))));
+    document.getElementById('share-code-display').value = code;
+    document.getElementById('modal-share').classList.remove('hidden'); document.getElementById('modal-share').classList.add('flex');
+};
+
+window.copyShareCode = () => {
+    const input = document.getElementById('share-code-display');
+    input.select(); document.execCommand('copy');
+    window.showMessage("Копирано!");
+};
+
+window.editQuiz = (id) => {
+    const qData = myQuizzes.find(x => x.id === id);
+    if (!qData) return;
+    editingQuizId = id;
+    questions = JSON.parse(JSON.stringify(qData.questions || []));
+    currentVideoId = qData.v;
+    window.switchScreen('create');
+    document.getElementById('yt-url').value = `https://www.youtube.com/watch?v=${qData.v}`;
+    window.loadEditorVideo(true);
+};
+
+window.deleteQuiz = async (id) => { if (user && confirm("Изтриване на урока?")) await deleteDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', id)); };
+
+// --- YT API ---
+window.onYouTubeIframeAPIReady = function() {
+    isYTReady = true;
+    console.log("YouTube API Ready");
+};
