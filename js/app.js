@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -15,6 +15,7 @@ const firebaseConfig = {
 const finalAppId = 'videoquiz-ultimate-live';
 
 const app = initializeApp(firebaseConfig);
+const functions = getFunctions(app);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
@@ -2045,3 +2046,45 @@ window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
     console.log("YouTube API Ready");
 };
+// --- AI ГЕНЕРАЦИЯ ---
+window.generateAIQuestions = async function() {
+    if (!currentVideoId) {
+        window.showMessage("Първо заредете видео!", "error");
+        return;
+    }
+
+    window.showMessage("🤖 AI анализира видеото... (30-60 секунди)", "info");
+
+    try {
+        const generateFunc = httpsCallable(functions, 'generateAIQuestions');
+        const result = await generateFunc({ videoId: currentVideoId });
+        const aiQuestions = result.data;
+
+        if (!aiQuestions || aiQuestions.length === 0) {
+            throw new Error("Няма генерирани въпроси");
+        }
+
+        // Конвертираме към формата на редактора
+        const newQuestions = aiQuestions.map(q => ({
+            time: q.time || 0,
+            text: q.text,
+            type: 'single',
+            points: 1,
+            options: q.options || ["", "", "", ""],
+            correct: q.correct || 0
+        }));
+
+        // Добавяме към списъка
+        questions = [...questions, ...newQuestions];
+        questions.sort((a,b) => a.time - b.time);
+        renderEditorList();
+
+        window.showMessage(`✅ Добавени ${newQuestions.length} въпроса!`, "success");
+
+    } catch (error) {
+        console.error(error);
+        window.showMessage("❌ Грешка: " + (error.message || "Неизвестна"), "error");
+    }
+};
+
+console.log("✅ AI функцията е заредена");
