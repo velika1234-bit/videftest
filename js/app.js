@@ -974,17 +974,7 @@ window.exportExcel = () => {
     window.showMessage("Excel файлът е генериран! (вкл. анализ по въпроси)");
 };
 
-const toPdfSafeText = (value) => {
-    const map = {
-        'А':'A','Б':'B','В':'V','Г':'G','Д':'D','Е':'E','Ж':'Zh','З':'Z','И':'I','Й':'Y','К':'K','Л':'L','М':'M','Н':'N','О':'O','П':'P','Р':'R','С':'S','Т':'T','У':'U','Ф':'F','Х':'H','Ц':'Ts','Ч':'Ch','Ш':'Sh','Щ':'Sht','Ъ':'A','Ь':'Y','Ю':'Yu','Я':'Ya',
-        'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sht','ъ':'a','ь':'y','ю':'yu','я':'ya'
-    };
-    return String(value ?? '')
-        .split('')
-        .map(ch => map[ch] || ch)
-        .join('')
-        .replace(/[^ -~]/g, '');
-};
+// --- ⚠️ ПРЕМАХНАТА toPdfSafeText - вече не се използва ---
 
 window.exportPDF = () => {
     const data = getResultsData();
@@ -999,52 +989,50 @@ window.exportPDF = () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
 
     const [head, ...body] = data;
-    const safeHead = head.map(toPdfSafeText);
-    const safeBody = body.map((row) => row.map(toPdfSafeText));
 
-    doc.setFont('helvetica', 'bold');
+    // --- БЪЛГАРСКИ ТЕКСТ, ШРИФТ TIMES (кирилица) ---
+    doc.setFont('times', 'bold');
     doc.setFontSize(16);
-    doc.text(`VideoQuiz - Results for session ${sessionID}`, 40, 40);
-    doc.setFont('helvetica', 'normal');
+    doc.text(`VideoQuiz - Резултати от сесия ${sessionID}`, 40, 40);
+    doc.setFont('times', 'normal');
     doc.setFontSize(10);
-    doc.text(`Date: ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`, 40, 58);
+    doc.text(`Дата: ${new Date().toLocaleString('bg-BG')}`, 40, 58);
 
     doc.autoTable({
-        head: [safeHead],
-        body: safeBody,
+        head: [head],
+        body: body,
         startY: 72,
         theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
+        styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak', font: 'times' },
         headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255] },
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
 
-    const analyticsHead = [[
-        'Q#', 'Question', 'Correct', 'Wrong', 'No answer', '% Correct', '% Wrong', 'First correct', 'Time (s)'
-    ]];
+    // --- АНАЛИТИКА ---
+    const analyticsHead = [['№', 'Въпрос', 'Верни', 'Грешни', 'Без отговор', '% Верни', '% Грешни', 'Първи верен', 'Време (s)']];
     const analyticsBody = analytics.rows.map((r) => [
-        toPdfSafeText(r.qIdx + 1),
-        toPdfSafeText(r.questionText),
-        toPdfSafeText(r.correct),
-        toPdfSafeText(r.wrong),
-        toPdfSafeText(r.missing),
-        toPdfSafeText(`${r.correctPct}%`),
-        toPdfSafeText(`${r.wrongPct}%`),
-        toPdfSafeText(r.firstCorrectName),
-        toPdfSafeText(r.firstCorrectSeconds)
+        r.qIdx + 1,
+        r.questionText,
+        r.correct,
+        r.wrong,
+        r.missing,
+        `${r.correctPct}%`,
+        `${r.wrongPct}%`,
+        r.firstCorrectName,
+        r.firstCorrectSeconds
     ]);
 
     const nextY = (doc.lastAutoTable?.finalY || 72) + 16;
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setFontSize(12);
-    doc.text(toPdfSafeText(`Class accuracy: ${analytics.summary?.classCorrectPct ?? 0}% correct / ${analytics.summary?.classWrongPct ?? 0}% wrong`), 40, nextY);
+    doc.text(`Обща успеваемост: ${analytics.summary?.classCorrectPct ?? 0}% верни / ${analytics.summary?.classWrongPct ?? 0}% грешни`, 40, nextY);
 
     doc.autoTable({
         head: analyticsHead,
         body: analyticsBody,
         startY: nextY + 8,
         theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
+        styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak', font: 'times' },
         headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
@@ -1341,11 +1329,10 @@ window.renderLiveQuestionUI = (q) => {
         if (window.lucide) lucide.createIcons();
     } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
         const defaultValue = (q.min + q.max) / 2;
-        const isTimeline = (q.type === 'timeline-slider') || (q.timelineMode === true);
+        const isTimeline = (q.type === 'timeline-slider');
         
         let sliderHtml = '';
         if (isTimeline) {
-            // Хронологичен плъзгач (timeline slider)
             const years = [];
             const step = Math.max(1, Math.ceil((q.max - q.min) / 5));
             for (let y = q.min; y <= q.max; y += step) {
@@ -1369,7 +1356,6 @@ window.renderLiveQuestionUI = (q) => {
                 </div>
             `;
         } else {
-            // Обикновен числов слайдер
             sliderHtml = `
                 <div class="space-y-6">
                     <input type="range" id="c-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" class="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer">
@@ -1562,11 +1548,10 @@ window.triggerSoloQuestion = (q) => {
         if (window.lucide) lucide.createIcons();
     } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
         const defaultValue = (q.min + q.max) / 2;
-        const isTimeline = (q.type === 'timeline-slider') || (q.timelineMode === true);
+        const isTimeline = (q.type === 'timeline-slider');
         
         let sliderHtml = '';
         if (isTimeline) {
-            // Хронологичен плъзгач
             const years = [];
             const step = Math.max(1, Math.ceil((q.max - q.min) / 5));
             for (let y = q.min; y <= q.max; y += step) {
@@ -1590,7 +1575,6 @@ window.triggerSoloQuestion = (q) => {
                 </div>
             `;
         } else {
-            // Обикновен числов слайдер
             sliderHtml = `
                 <div class="space-y-6">
                     <input type="range" id="s-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" class="w-full h-3 bg-white/20 rounded-lg appearance-none cursor-pointer">
@@ -1746,7 +1730,7 @@ window.finishSoloGame = async () => {
     }
 };
 
-// --- EDITOR ENGINE (вече поправен) ---
+// --- EDITOR ENGINE (поправен) ---
 window.loadEditorVideo = (isEdit = false) => {
     const url = document.getElementById('yt-url')?.value;
     const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
@@ -1883,7 +1867,6 @@ window.saveQuestion = () => {
         const toleranceInput = document.getElementById('m-numeric-tolerance');
         
         if (!minInput || !maxInput || !stepInput || !correctInput || !toleranceInput) {
-            console.error('Numeric fields not found!');
             return window.showMessage("Грешка: Полетата не са заредени!", "error");
         }
         
