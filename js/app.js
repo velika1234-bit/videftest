@@ -15,7 +15,6 @@ const firebaseConfig = {
 const finalAppId = 'videoquiz-ultimate-live';
 
 const app = initializeApp(firebaseConfig);
-
 const db = getFirestore(app);
 const auth = getAuth(app);
 
@@ -26,7 +25,7 @@ let isTeacher = false;
 let editingQuizId = null;
 let editingQuestionIndex = null;
 const MASTER_TEACHER_CODE = "vilidaf76";
-const functions = getFunctions(app);
+
 let player, solvePlayer, hostPlayer;
 let questions = [], currentQuiz = null, studentNameValue = "";
 let sessionID = "", liveActiveQIdx = -1;
@@ -50,7 +49,7 @@ let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
 
-// Helper to get consistent paths
+// Helper functions for Firestore paths
 const getTeacherSoloResultsCollection = (teacherId) => collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
 const getSessionRefById = (id) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
 const getParticipantsCollection = (id) => collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id, 'participants');
@@ -975,8 +974,6 @@ window.exportExcel = () => {
     window.showMessage("Excel файлът е генериран! (вкл. анализ по въпроси)");
 };
 
-// --- ⚠️ ПРЕМАХНАТА toPdfSafeText - вече не се използва ---
-
 window.exportPDF = () => {
     const data = getResultsData();
     if (data.length === 0) return window.showMessage("Няма данни за PDF експорт.", "error");
@@ -991,7 +988,6 @@ window.exportPDF = () => {
 
     const [head, ...body] = data;
 
-    // --- БЪЛГАРСКИ ТЕКСТ, ШРИФТ TIMES (кирилица) ---
     doc.setFont('times', 'bold');
     doc.setFontSize(16);
     doc.text(`VideoQuiz - Резултати от сесия ${sessionID}`, 40, 40);
@@ -1009,7 +1005,6 @@ window.exportPDF = () => {
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
 
-    // --- АНАЛИТИКА ---
     const analyticsHead = [['№', 'Въпрос', 'Верни', 'Грешни', 'Без отговор', '% Верни', '% Грешни', 'Първи верен', 'Време (s)']];
     const analyticsBody = analytics.rows.map((r) => [
         r.qIdx + 1,
@@ -1219,7 +1214,6 @@ window.pickLiveOrder = (el, originalIdx) => {
     }
 };
 
-// --- TIMELINE (хронология/подреждане) ---
 window.pickLiveTimeline = (el, originalIdx) => {
     if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
     if (window.userOrderSequence.includes(originalIdx)) return;
@@ -1272,7 +1266,6 @@ window.submitLiveOrderingConfirm = () => {
     window.submitLiveFinal(isCorrect);
 };
 
-// --- RENDER LIVE QUESTION UI ---
 window.renderLiveQuestionUI = (q) => {
     const container = document.getElementById('live-options-client');
     container.innerHTML = '';
@@ -1544,8 +1537,7 @@ window.triggerSoloQuestion = (q) => {
             <div class="grid grid-cols-2 gap-3 mt-4">
                 <button onclick="window.clearSoloTimeline()" class="py-3 bg-slate-600 rounded-xl font-black text-xs">Изчисти</button>
                 <button onclick="window.submitSoloTimeline()" class="py-3 bg-amber-600 rounded-xl font-black text-xs">Изпрати</button>
-            </div>
-        `;
+            </div>`;
         if (window.lucide) lucide.createIcons();
     } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
         const defaultValue = (q.min + q.max) / 2;
@@ -1600,7 +1592,6 @@ window.triggerSoloQuestion = (q) => {
     }
 };
 
-// --- SOLO HELPER FUNCTIONS ---
 window.submitSoloNumeric = () => {
     const slider = document.getElementById('s-numeric-slider');
     if (!slider) return;
@@ -1661,7 +1652,6 @@ window.clearSoloOrdering = () => {
     document.querySelectorAll('.solo-order-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
 };
 
-// --- TIMELINE SOLO FUNCTIONS ---
 window.pickSoloTimeline = (el, originalIdx) => {
     if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
     if (window.userOrderSequence.includes(originalIdx)) return;
@@ -1731,7 +1721,7 @@ window.finishSoloGame = async () => {
     }
 };
 
-// --- EDITOR ENGINE (поправен) ---
+// --- EDITOR ENGINE ---
 window.loadEditorVideo = (isEdit = false) => {
     const url = document.getElementById('yt-url')?.value;
     const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
@@ -1861,33 +1851,11 @@ window.saveQuestion = () => {
     } else if (type === 'open') {
         qData.correct = document.getElementById('m-open-correct')?.value.trim().toLowerCase();
     } else if (type === 'numeric' || type === 'timeline-slider') {
-        const minInput = document.getElementById('m-numeric-min');
-        const maxInput = document.getElementById('m-numeric-max');
-        const stepInput = document.getElementById('m-numeric-step');
-        const correctInput = document.getElementById('m-numeric-correct');
-        const toleranceInput = document.getElementById('m-numeric-tolerance');
-        
-        if (!minInput || !maxInput || !stepInput || !correctInput || !toleranceInput) {
-            return window.showMessage("Грешка: Полетата не са заредени!", "error");
-        }
-        
-        const min = parseFloat(minInput.value);
-        const max = parseFloat(maxInput.value);
-        const step = parseFloat(stepInput.value);
-        const correct = parseFloat(correctInput.value);
-        const tolerance = parseFloat(toleranceInput.value) || 0;
-        
-        if (isNaN(min) || isNaN(max) || isNaN(step) || isNaN(correct)) {
-            return window.showMessage("Моля, попълнете всички полета с валидни числа!", "error");
-        }
-        
-        if (min >= max) {
-            return window.showMessage("Максималната стойност трябва да е по-голяма от минималната!", "error");
-        }
-        
-        if (correct < min || correct > max) {
-            return window.showMessage("Точният отговор трябва да е между минималната и максималната стойност!", "error");
-        }
+        const min = parseFloat(document.getElementById('m-numeric-min').value);
+        const max = parseFloat(document.getElementById('m-numeric-max').value);
+        const step = parseFloat(document.getElementById('m-numeric-step').value);
+        const correct = parseFloat(document.getElementById('m-numeric-correct').value);
+        const tolerance = parseFloat(document.getElementById('m-numeric-tolerance').value) || 0;
 
         qData.min = min;
         qData.max = max;
@@ -1917,9 +1885,8 @@ window.editQuestionContent = (index) => {
     document.getElementById('m-time').innerText = window.formatTime(q.time);
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
-    
     window.updateModalFields();
-    
+
     if (q.type === 'single' || q.type === 'multiple' || q.type === 'ordering' || q.type === 'timeline') {
         const list = document.getElementById('m-opts-list');
         if (list) list.innerHTML = '';
@@ -1935,19 +1902,17 @@ window.editQuestionContent = (index) => {
         const openCorrect = document.getElementById('m-open-correct');
         if (openCorrect) openCorrect.value = q.correct || '';
     } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
-        setTimeout(() => {
-            const minInput = document.getElementById('m-numeric-min');
-            const maxInput = document.getElementById('m-numeric-max');
-            const stepInput = document.getElementById('m-numeric-step');
-            const correctInput = document.getElementById('m-numeric-correct');
-            const toleranceInput = document.getElementById('m-numeric-tolerance');
-            
-            if (minInput) minInput.value = q.min ?? 0;
-            if (maxInput) maxInput.value = q.max ?? 100;
-            if (stepInput) stepInput.value = q.step ?? 1;
-            if (correctInput) correctInput.value = q.correct ?? 50;
-            if (toleranceInput) toleranceInput.value = q.tolerance ?? 0;
-        }, 50);
+        const minInput = document.getElementById('m-numeric-min');
+        const maxInput = document.getElementById('m-numeric-max');
+        const stepInput = document.getElementById('m-numeric-step');
+        const correctInput = document.getElementById('m-numeric-correct');
+        const toleranceInput = document.getElementById('m-numeric-tolerance');
+        
+        if (minInput) minInput.value = q.min ?? 0;
+        if (maxInput) maxInput.value = q.max ?? 100;
+        if (stepInput) stepInput.value = q.step ?? 1;
+        if (correctInput) correctInput.value = q.correct ?? 50;
+        if (toleranceInput) toleranceInput.value = q.tolerance ?? 0;
     }
 };
 
@@ -2045,58 +2010,14 @@ window.editQuiz = (id) => {
     window.loadEditorVideo(true);
 };
 
-window.deleteQuiz = async (id) => { if (user && confirm("Изтриване на урока?")) await deleteDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', id)); };
-/*// --- AI ГЕНЕРАЦИЯ (Firebase Functions) ---
-window.generateAIQuestions = async function() {
-  if (!currentVideoId) {
-    return window.showMessage("Първо заредете видео!", "error");
-  }
-
-  const count = prompt("Колко въпроса да генерира AI? (1-10)", "5");
-  if (!count) return;
-  
-  const num = parseInt(count);
-  if (isNaN(num) || num < 1 || num > 10) {
-    return window.showMessage("Моля, въведете число между 1 и 10.", "error");
-  }
-
-  window.showMessage("🤖 AI анализира видеото... това отнема до 2 минути.", "info");
-
-  try {
-    const generateAIQuestionsFunction = httpsCallable(functions, 'generateAIQuestions');
-    const result = await generateAIQuestionsFunction({ 
-      videoId: currentVideoId,
-      count: num 
-    });
-
-    const aiQuestions = result.data;
-
-    if (!aiQuestions || aiQuestions.length === 0) {
-      throw new Error("Няма генерирани въпроси");
+window.deleteQuiz = async (id) => {
+    if (!user) return;
+    if (confirm("Изтриване на урока?")) {
+        await deleteDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', id));
+        window.showMessage("Урокът е изтрит.", "info");
     }
+};
 
-    // Трансформираме към формата на редактора
-    const newQuestions = aiQuestions.map(q => ({
-      time: q.time || 0,
-      text: q.text,
-      type: 'single',
-      points: 1,
-      options: q.options,
-      correct: q.correct
-    }));
-
-    // Добавяме към съществуващите въпроси
-    questions = [...questions, ...newQuestions];
-    questions.sort((a,b) => a.time - b.time);
-    
-    renderEditorList();
-    window.showMessage(`✅ Добавени ${newQuestions.length} AI-генерирани въпроса!`, "success");
-
-  } catch (error) {
-    console.error("AI generation error:", error);
-    window.showMessage("❌ Грешка при AI генерация: " + (error.message || "Неизвестна грешка"), "error");
-  }
-};*/
 // --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
