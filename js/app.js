@@ -15,10 +15,9 @@ const firebaseConfig = {
 const finalAppId = 'videoquiz-ultimate-live';
 
 const app = initializeApp(firebaseConfig);
-functions.customHeaders = { 'Debug': 'true' };
 const db = getFirestore(app);
 const auth = getAuth(app);
-
+const functions = getFunctions(app, 'us-central1');
 // --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
@@ -2088,31 +2087,20 @@ window.generateAIQuestions = async function() {
 };
 
 console.log("✅ AI функцията е заредена");
-// --- AI ГЕНЕРАЦИЯ ---
+// --- AI ГЕНЕРАЦИЯ - ОПРОСТЕНА ВЕРСИЯ ---
 window.generateAIQuestions = async function() {
-    console.log("AI функцията стартира");
-    console.log("currentVideoId =", currentVideoId);
-    
     if (!currentVideoId) {
-        console.error("Липсва videoId!");
-        window.showMessage("❌ Първо заредете видео!", "error");
+        window.showMessage("Първо заредете видео!", "error");
         return;
     }
 
-    window.showMessage("🤖 AI анализира видеото... (30-60 секунди)", "info");
+    window.showMessage("🤖 Генерирам въпроси...", "info");
 
     try {
         const generateFunc = httpsCallable(functions, 'generateAIQuestions');
-  const result = await generateFunc({ 
-  videoId: currentVideoId 
-});
+        const result = await generateFunc({ videoId: currentVideoId });
         const aiQuestions = result.data;
 
-        if (!aiQuestions || !aiQuestions.length) {
-            throw new Error("Няма генерирани въпроси");
-        }
-
-        // Конвертираме към формата на редактора
         const newQuestions = aiQuestions.map(q => ({
             time: q.time || 0,
             text: q.text,
@@ -2122,18 +2110,14 @@ window.generateAIQuestions = async function() {
             correct: q.correct || 0
         }));
 
-        // Добавяме към списъка
         questions = [...questions, ...newQuestions];
         questions.sort((a,b) => a.time - b.time);
-        
-        if (typeof renderEditorList === 'function') {
-            renderEditorList();
-        }
-
+        renderEditorList();
         window.showMessage(`✅ Добавени ${newQuestions.length} въпроса!`, "success");
 
     } catch (error) {
         console.error("AI Error:", error);
         window.showMessage("❌ Грешка: " + (error.message || "Неизвестна"), "error");
     }
+};
 };
