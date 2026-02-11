@@ -280,7 +280,7 @@
             <div class="bg-white w-full max-w-xl rounded-[4rem] p-12 animate-pop flex flex-col gap-8 shadow-2xl max-h-[95vh] overflow-y-auto custom-scrollbar">
                 <div class="flex items-center justify-between"><h2 class="text-2xl font-black" id="m-title-text">Нов въпрос</h2><span id="m-time" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-sm">00:00</span></div>
                 <div class="grid grid-cols-2 gap-4">
-                    <select id="m-type" onchange="window.updateModalFields()" class="p-5 bg-slate-50 border-2 rounded-2xl font-black outline-none text-xs"><option value="single">Един верен</option><option value="multiple">Няколко верни</option><option value="boolean">Вярно/Невярно</option><option value="open">Отворен отговор</option><option value="ordering">Подреждане</option></select>
+                    <select id="m-type" onchange="window.updateModalFields()" class="p-5 bg-slate-50 border-2 rounded-2xl font-black outline-none text-xs"><option value="single">Един верен</option><option value="multiple">Няколко верни</option><option value="boolean">Вярно/Невярно</option><option value="open">Отворен отговор</option><option value="ordering">Подреждане</option><option value="numeric">Числен отговор (плъзгач)</option></select>
                     <input type="number" id="m-points" value="1" min="1" class="p-5 bg-slate-50 border-2 rounded-2xl font-black text-center text-xs">
                 </div>
                 <textarea id="m-text" placeholder="Задайте въпрос тук..." class="w-full p-6 bg-slate-50 rounded-2xl font-black border-2 outline-none text-sm resize-none" rows="3"></textarea>
