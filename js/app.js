@@ -604,7 +604,13 @@ window.initHostPlayer = () => {
     document.getElementById('host-video-container').innerHTML = '<div id="host-video"></div>';
     hostPlayer = new YT.Player('host-video', {
         videoId: currentQuiz.v,
-        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1 },
+        playerVars: { 
+            'autoplay': 1, 
+            'modestbranding': 1, 
+            'rel': 0, 
+            'playsinline': 1,
+            'origin': 'https://velika1234-bit.github.io'
+        },
         events: {
             'onReady': (event) => event.target.playVideo(),
             'onStateChange': async (e) => {
@@ -1464,8 +1470,16 @@ window.initSolvePlayer = () => {
     }
     document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
     solvePlayer = new YT.Player('solve-player', {
-        videoId: currentQuiz.v, width: '100%', height: '100%',
-        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1 },
+        videoId: currentQuiz.v, 
+        width: '100%', 
+        height: '100%',
+        playerVars: { 
+            'autoplay': 1, 
+            'controls': 1, 
+            'rel': 0, 
+            'playsinline': 1,
+            'origin': 'https://velika1234-bit.github.io'
+        },
         events: { 'onStateChange': (e) => {
             if (e.data === YT.PlayerState.ENDED) {
                 window.finishSoloGame();
@@ -1736,10 +1750,18 @@ window.loadEditorVideo = (isEdit = false) => {
     currentVideoId = id;
     document.getElementById('editor-view').classList.remove('hidden');
     document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
-    player = new YT.Player('player', { videoId: id, events: { 'onReady': () => {
-        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
-        activeIntervals.push(i);
-    }}});
+    player = new YT.Player('player', { 
+        videoId: id, 
+        playerVars: {
+            'origin': 'https://velika1234-bit.github.io'
+        },
+        events: { 
+            'onReady': () => {
+                const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
+                activeIntervals.push(i);
+            }
+        }
+    });
     if (!isEdit) { questions = []; editingQuizId = null; }
     renderEditorList();
 };
