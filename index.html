@@ -83,7 +83,7 @@
                     <button onclick="window.handleLogout()" class="bg-slate-100 text-slate-500 px-8 py-4 rounded-2xl font-black uppercase text-[10px]">Изход</button>
                 </div>
             </div>
-            
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div class="space-y-4">
                     <h3 class="text-base font-black flex items-center gap-2 text-indigo-600 px-2"><i data-lucide="book-open"></i> Вашите уроци</h3>
@@ -123,7 +123,7 @@
         <div id="screen-teacher-auth" class="hidden py-10 animate-pop">
             <div class="max-w-md mx-auto bg-white p-10 rounded-[3rem] border shadow-2xl text-center space-y-6">
                 <h2 class="text-2xl font-black" id="auth-title">Вход за Учители</h2>
-                
+
                 <div class="space-y-4 text-left">
                     <div>
                         <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Имейл</label>
@@ -140,11 +140,11 @@
                 </div>
 
                 <button id="auth-submit-btn" onclick="window.handleAuthSubmit()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase shadow-xl hover:bg-indigo-700 transition-all text-sm">Влез</button>
-                
+
                 <p id="auth-toggle-text" class="text-xs text-slate-500" onclick="window.toggleAuthMode()">
                     Нямате акаунт? <span class="underline font-black cursor-pointer">Регистрирайте се</span>
                 </p>
-                
+
                 <button onclick="window.switchScreen('welcome')" class="text-[10px] font-bold text-slate-400 uppercase mt-4">Назад</button>
             </div>
         </div>
@@ -156,9 +156,6 @@
                 <input type="text" id="yt-url" placeholder="YouTube линк..." class="flex-1 w-full p-5 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-600 outline-none font-bold">
                 <div class="flex gap-2 w-full sm:w-auto">
                     <button onclick="window.loadEditorVideo()" class="flex-1 sm:flex-none bg-slate-900 text-white px-8 py-5 rounded-2xl font-black uppercase text-xs">Зареди</button>
-                    <button onclick="window.generateAIQuestions()" class="bg-purple-600 text-white px-8 py-5 rounded-2xl font-black uppercase text-xs flex items-center gap-2 shadow-lg hover:bg-purple-700 transition-all">
-        <i data-lucide="sparkles" class="w-4 h-4"></i> AI Генерирай
-    </button>
                     <button onclick="window.saveQuizToLibrary()" class="flex-1 sm:flex-none bg-indigo-600 text-white px-8 py-5 rounded-2xl font-black uppercase shadow-xl text-xs">Запази</button>
                 </div>
             </div>
@@ -283,7 +280,16 @@
             <div class="bg-white w-full max-w-xl rounded-[4rem] p-12 animate-pop flex flex-col gap-8 shadow-2xl max-h-[95vh] overflow-y-auto custom-scrollbar">
                 <div class="flex items-center justify-between"><h2 class="text-2xl font-black" id="m-title-text">Нов въпрос</h2><span id="m-time" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-sm">00:00</span></div>
                 <div class="grid grid-cols-2 gap-4">
-                    <select id="m-type" onchange="window.updateModalFields()" class="p-5 bg-slate-50 border-2 rounded-2xl font-black outline-none text-xs"><option value="single">Един верен</option><option value="multiple">Няколко верни</option><option value="boolean">Вярно/Невярно</option><option value="open">Отворен отговор</option><option value="ordering">Подреждане</option><option value="numeric">Числен отговор (плъзгач)</option><option value="timeline-slider">📅 Хронологичен плъзгач (Timeline)</option></select>
+                    <select id="m-type" onchange="window.updateModalFields()" class="p-5 bg-slate-50 border-2 rounded-2xl font-black outline-none text-xs">
+                        <option value="single">Един верен</option>
+                        <option value="multiple">Няколко верни</option>
+                        <option value="boolean">Вярно/Невярно</option>
+                        <option value="open">Отворен отговор</option>
+                        <option value="ordering">Подреждане</option>
+                        <option value="timeline">📅 Хронология (Timeline)</option>
+                        <option value="numeric">Числен отговор (плъзгач)</option>
+                        <option value="timeline-slider">📅 Хронологичен плъзгач (Timeline Slider)</option>
+                    </select>
                     <input type="number" id="m-points" value="1" min="1" class="p-5 bg-slate-50 border-2 rounded-2xl font-black text-center text-xs">
                 </div>
                 <textarea id="m-text" placeholder="Задайте въпрос тук..." class="w-full p-6 bg-slate-50 rounded-2xl font-black border-2 outline-none text-sm resize-none" rows="3"></textarea>
@@ -353,13 +359,11 @@ service cloud.firestore {
       }
 
       // 2. ДАННИ НА УЧИТЕЛЯ (Лична папка)
-      // Учителят има пълен контрол над всичко в своята папка
       match /users/{userId}/{document=**} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
       
       // 3. ИЗКЛЮЧЕНИЕ ЗА РЕЗУЛТАТИ (Индивидуален режим)
-      // Позволяваме на учениците (всеки логнат, вкл. анонимно) да ЗАПИСВА резултат
       match /users/{teacherId}/solo_results/{resultId} {
          allow create: if request.auth != null;
       }
