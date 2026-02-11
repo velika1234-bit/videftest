@@ -2103,8 +2103,8 @@ window.generateAIQuestions = async function() {
 
     try {
         const generateFunc = httpsCallable(functions, 'generateAIQuestions');
-        const result = await generateFunc({ 
-  data: { videoId: currentVideoId } 
+  const result = await generateFunc({ 
+  videoId: currentVideoId 
 });
         const aiQuestions = result.data;
 
