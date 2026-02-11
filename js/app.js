@@ -2047,7 +2047,7 @@ window.editQuiz = (id) => {
 
 window.deleteQuiz = async (id) => { if (user && confirm("Изтриване на урока?")) await deleteDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', id)); };
 /*// --- AI ГЕНЕРАЦИЯ (Firebase Functions) ---
-window.generateAIQuestions = async function() {*/
+window.generateAIQuestions = async function() {
   if (!currentVideoId) {
     return window.showMessage("Първо заредете видео!", "error");
   }
@@ -2096,7 +2096,7 @@ window.generateAIQuestions = async function() {*/
     console.error("AI generation error:", error);
     window.showMessage("❌ Грешка при AI генерация: " + (error.message || "Неизвестна грешка"), "error");
   }
-};
+};*/
 // --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
