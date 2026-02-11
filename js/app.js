@@ -1695,7 +1695,49 @@ window.editQuestionContent = (index) => {
         if (document.getElementById('m-open-correct')) document.getElementById('m-open-correct').value = q.correct;
     }
 };
+    window.updateModalFields = () => {
+    const type = document.getElementById('m-type').value;
+    const container = document.getElementById('m-opts-container');
+    container.innerHTML = '';
 
+    if (type === 'single' || type === 'multiple' || type === 'ordering') {
+        // ... съществуващ код ...
+    } else if (type === 'boolean') {
+        // ...
+    } else if (type === 'open') {
+        // ...
+    } else if (type === 'numeric') {
+        container.innerHTML = `
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Мин. стойност</label>
+                        <input type="number" id="m-numeric-min" value="0" class="w-full p-3 bg-slate-50 rounded-xl border font-black text-sm">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Макс. стойност</label>
+                        <input type="number" id="m-numeric-max" value="100" class="w-full p-3 bg-slate-50 rounded-xl border font-black text-sm">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Стъпка</label>
+                        <input type="number" id="m-numeric-step" value="1" min="0.1" step="any" class="w-full p-3 bg-slate-50 rounded-xl border font-black text-sm">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Точен отговор</label>
+                        <input type="number" id="m-numeric-correct" value="50" class="w-full p-3 bg-slate-50 rounded-xl border font-black text-sm">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase">Толеранс (±)</label>
+                    <input type="number" id="m-numeric-tolerance" value="0" min="0" step="any" class="w-full p-3 bg-slate-50 rounded-xl border font-black text-sm">
+                    <p class="text-[9px] text-slate-400 mt-1">Ако толерансът е 2, то отговор 48-52 е верен.</p>
+                </div>
+            </div>
+        `;
+    }
+};
 function renderEditorList() {
     const list = document.getElementById('q-list'); if (!list) return;
     list.innerHTML = questions.map((q, i) => `
