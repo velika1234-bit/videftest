@@ -15,7 +15,7 @@ const firebaseConfig = {
 const finalAppId = 'videoquiz-ultimate-live';
 
 const app = initializeApp(firebaseConfig);
-const functions = getFunctions(app);
+const functions = getFunctions(app, 'us-central1');
 const db = getFirestore(app);
 const auth = getAuth(app);
 
