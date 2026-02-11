@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
+
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -17,7 +17,7 @@ const finalAppId = 'videoquiz-ultimate-live';
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const functions = getFunctions(app, 'us-central1');
+
 // --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
@@ -49,14 +49,12 @@ let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
 
-// Helper functions for Firestore paths
 const getTeacherSoloResultsCollection = (teacherId) => collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
 const getSessionRefById = (id) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
 const getParticipantsCollection = (id) => collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id, 'participants');
 const getParticipantRef = (sessionId, participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', sessionId, 'participants', participantId);
 const getLegacyParticipantsCollection = () => collection(db, 'artifacts', finalAppId, 'public', 'data', 'participants');
 const getLegacyParticipantRef = (participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'participants', participantId);
-const getActiveParticipantRef = (sessionId, participantId) => participantStorageMode === 'legacy' ? getLegacyParticipantRef(participantId) : getParticipantRef(sessionId, participantId);
 
 window.tempLiveSelection = null;
 
@@ -604,13 +602,7 @@ window.initHostPlayer = () => {
     document.getElementById('host-video-container').innerHTML = '<div id="host-video"></div>';
     hostPlayer = new YT.Player('host-video', {
         videoId: currentQuiz.v,
-        playerVars: { 
-            'autoplay': 1, 
-            'modestbranding': 1, 
-            'rel': 0, 
-            'playsinline': 1,
-            'origin': 'https://velika1234-bit.github.io'
-        },
+        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1 },
         events: {
             'onReady': (event) => event.target.playVideo(),
             'onStateChange': async (e) => {
@@ -978,6 +970,18 @@ window.exportExcel = () => {
 
     XLSX.writeFile(wb, `results_${sessionID}_${timestamp}.xlsx`);
     window.showMessage("Excel файлът е генериран! (вкл. анализ по въпроси)");
+};
+
+const toPdfSafeText = (value) => {
+    const map = {
+        'А':'A','Б':'B','В':'V','Г':'G','Д':'D','Е':'E','Ж':'Zh','З':'Z','И':'I','Й':'Y','К':'K','Л':'L','М':'M','Н':'N','О':'O','П':'P','Р':'R','С':'S','Т':'T','У':'U','Ф':'F','Х':'H','Ц':'Ts','Ч':'Ch','Ш':'Sh','Щ':'Sht','Ъ':'A','Ь':'Y','Ю':'Yu','Я':'Ya',
+        'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sht','ъ':'a','ь':'y','ю':'yu','я':'ya'
+    };
+    return String(value ?? '')
+        .split('')
+        .map(ch => map[ch] || ch)
+        .join('')
+        .replace(/[^ -~]/g, '');
 };
 
 window.exportPDF = () => {
@@ -1477,8 +1481,7 @@ window.initSolvePlayer = () => {
             'autoplay': 1, 
             'controls': 1, 
             'rel': 0, 
-            'playsinline': 1,
-            'origin': 'https://velika1234-bit.github.io'
+            'playsinline': 1
         },
         events: { 'onStateChange': (e) => {
             if (e.data === YT.PlayerState.ENDED) {
@@ -1753,7 +1756,6 @@ window.loadEditorVideo = (isEdit = false) => {
     player = new YT.Player('player', { 
         videoId: id, 
         playerVars: {
-            'origin': 'https://velika1234-bit.github.io'
         },
         events: { 
             'onReady': () => {
@@ -2044,80 +2046,4 @@ window.deleteQuiz = async (id) => {
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
     console.log("YouTube API Ready");
-};
-// --- AI ГЕНЕРАЦИЯ ---
-window.generateAIQuestions = async function() {
-    if (!currentVideoId) {
-        window.showMessage("Първо заредете видео!", "error");
-        return;
-    }
-
-    window.showMessage("🤖 AI анализира видеото... (30-60 секунди)", "info");
-
-    try {
-        const generateFunc = httpsCallable(functions, 'generateAIQuestions');
-        const result = await generateFunc({ videoId: currentVideoId });
-        const aiQuestions = result.data;
-
-        if (!aiQuestions || aiQuestions.length === 0) {
-            throw new Error("Няма генерирани въпроси");
-        }
-
-        // Конвертираме към формата на редактора
-        const newQuestions = aiQuestions.map(q => ({
-            time: q.time || 0,
-            text: q.text,
-            type: 'single',
-            points: 1,
-            options: q.options || ["", "", "", ""],
-            correct: q.correct || 0
-        }));
-
-        // Добавяме към списъка
-        questions = [...questions, ...newQuestions];
-        questions.sort((a,b) => a.time - b.time);
-        renderEditorList();
-
-        window.showMessage(`✅ Добавени ${newQuestions.length} въпроса!`, "success");
-
-    } catch (error) {
-        console.error(error);
-        window.showMessage("❌ Грешка: " + (error.message || "Неизвестна"), "error");
-    }
-};
-
-console.log("✅ AI функцията е заредена");
-// --- AI ГЕНЕРАЦИЯ - ОПРОСТЕНА ВЕРСИЯ ---
-window.generateAIQuestions = async function() {
-    if (!currentVideoId) {
-        window.showMessage("Първо заредете видео!", "error");
-        return;
-    }
-
-    window.showMessage("🤖 Генерирам въпроси...", "info");
-
-    try {
-        const generateFunc = httpsCallable(functions, 'generateAIQuestions');
-        const result = await generateFunc({ videoId: currentVideoId });
-        const aiQuestions = result.data;
-
-        const newQuestions = aiQuestions.map(q => ({
-            time: q.time || 0,
-            text: q.text,
-            type: 'single',
-            points: 1,
-            options: q.options || ["", "", "", ""],
-            correct: q.correct || 0
-        }));
-
-        questions = [...questions, ...newQuestions];
-        questions.sort((a,b) => a.time - b.time);
-        renderEditorList();
-        window.showMessage(`✅ Добавени ${newQuestions.length} въпроса!`, "success");
-
-    } catch (error) {
-        console.error("AI Error:", error);
-        window.showMessage("❌ Грешка: " + (error.message || "Неизвестна"), "error");
-    }
-};
 };
