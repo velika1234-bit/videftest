@@ -1,10 +1,24 @@
 // ============================================
-// VideoQuiz Ultimate - Основен модул
+// VideoQuiz Ultimate - ОСНОВЕН МОДУЛ
+// Версия: Стабилна, без AI, без дублиране
 // ============================================
 
 // ----------------------------------------------------------------------
-// 1. ИМПОРТИ от firebase.js (вече няма дублиране!)
+// 1. ИМПОРТИ
 // ----------------------------------------------------------------------
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { 
+    getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
+    serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, 
+    limit, getDocs, collectionGroup 
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { 
+    getAuth, signInAnonymously, onAuthStateChanged, signOut, 
+    setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword, signInWithCustomToken 
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+// --- Импортиране на вече инициализираните Firebase услуги и helper функции ---
 import { 
     app, db, auth, functions, finalAppId,
     getTeacherSoloResultsCollection, getSessionRefById,
@@ -50,7 +64,7 @@ window.tempLiveSelection = null;
 const AVATARS = ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦", "🐤", "🦄", "🐝", "🦋", "🐌", "🐞", "🐙", "🐬"];
 
 // ----------------------------------------------------------------------
-// 3. HELPER ФУНКЦИИ (ОСТАНАЛИТЕ, КОИТО НЕ СА В firebase.js)
+// 3. HELPER ФУНКЦИИ (без Firebase пътища)
 // ----------------------------------------------------------------------
 const safeSetText = (id, text) => {
     const el = document.getElementById(id);
@@ -742,7 +756,7 @@ window.finishLiveSession = async () => {
 };
 
 // ----------------------------------------------------------------------
-// 8. EXCEL & PDF (само основните функции, без транслитерация)
+// 8. EXCEL & PDF (без транслитерация, с кирилица)
 // ----------------------------------------------------------------------
 function getResultsData() {
     if (!currentQuiz || !lastFetchedParticipants) return [];
@@ -1062,6 +1076,7 @@ window.joinLiveSession = async () => {
         else window.showMessage("Грешка при свързване.", "error");
     }
 };
+
 window.selectLiveOption = (el, val) => {
     document.querySelectorAll('.client-opt-btn').forEach(btn => {
         btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
@@ -1348,7 +1363,13 @@ const readQuestionWithSpeech = (text) => {
     }
 };
 
-// --- SOLO LOGIC ---
+// =========================================================================
+// !!! ТУК ПОСТАВЯТЕ ОСТАНАЛАТА ЛОГИКА ОТ СТАРИЯ app.js (без дублиране) !!!
+// =========================================================================
+
+// ----------------------------------------------------------------------
+// 10. SOLO LOGIC (индивидуален режим)
+// ----------------------------------------------------------------------
 window.startIndividual = async () => {
     const pinCode = document.getElementById('ind-quiz-code').value.trim();
     const decoded = window.decodeQuizCode(pinCode);
@@ -1646,7 +1667,9 @@ window.finishSoloGame = async () => {
     }
 };
 
-// --- EDITOR ENGINE ---
+// ----------------------------------------------------------------------
+// 11. EDITOR ENGINE (създаване и редактиране на уроци)
+// ----------------------------------------------------------------------
 window.loadEditorVideo = (isEdit = false) => {
     const url = document.getElementById('yt-url')?.value;
     const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
@@ -1663,8 +1686,7 @@ window.loadEditorVideo = (isEdit = false) => {
     document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
     player = new YT.Player('player', { 
         videoId: id, 
-        playerVars: {
-        },
+        playerVars: {},
         events: { 
             'onReady': () => {
                 const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
@@ -1950,11 +1972,10 @@ window.deleteQuiz = async (id) => {
     }
 };
 
-// --- YT API ---
+// ----------------------------------------------------------------------
+// 12. YT API
+// ----------------------------------------------------------------------
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
     console.log("YouTube API Ready");
 };
-// ... (продължава със selectLiveOption, submitLive..., renderLiveQuestionUI, submitLiveFinal, stopSpeechReader, readQuestionWithSpeech,
-//      solo логика, editor логика и т.н. – всичко, което беше в стария app.js, 
-//      но без helper функциите за пътища и Firebase конфиг)
