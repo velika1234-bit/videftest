@@ -1,34 +1,24 @@
-// ============================================
-// VideoQuiz Ultimate - ОСНОВЕН МОДУЛ
-// Версия: Стабилна, без AI, без дублиране
-// ============================================
-
-// ----------------------------------------------------------------------
-// 1. ИМПОРТИ
-// ----------------------------------------------------------------------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { 
-    getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
-    serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, 
-    limit, getDocs, collectionGroup 
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { 
-    getAuth, signInAnonymously, onAuthStateChanged, signOut, 
-    setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, signInWithCustomToken 
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-// --- Импортиране на вече инициализираните Firebase услуги и helper функции ---
-import { 
-    app, db, auth, functions, finalAppId,
-    getTeacherSoloResultsCollection, getSessionRefById,
-    getParticipantsCollection, getParticipantRef,
-    getLegacyParticipantsCollection, getLegacyParticipantRef
-} from './firebase.js';
+// --- FIREBASE CONFIGURATION ---
+const firebaseConfig = {
+    apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
+    authDomain: "videoquiz-ultimate.firebaseapp.com",
+    projectId: "videoquiz-ultimate",
+    storageBucket: "videoquiz-ultimate.firebasestorage.app",
+    messagingSenderId: "793138692820",
+    appId: "1:793138692820:web:8ee2418d28d47fca6bf141"
+};
 
-// ----------------------------------------------------------------------
-// 2. ГЛОБАЛНИ ПРОМЕНЛИВИ (STATE)
-// ----------------------------------------------------------------------
+const finalAppId = 'videoquiz-ultimate-live';
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
 let isTeacher = false;
@@ -59,13 +49,20 @@ let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
 
+// Helper functions for Firestore paths
+const getTeacherSoloResultsCollection = (teacherId) => collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
+const getSessionRefById = (id) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
+const getParticipantsCollection = (id) => collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id, 'participants');
+const getParticipantRef = (sessionId, participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', sessionId, 'participants', participantId);
+const getLegacyParticipantsCollection = () => collection(db, 'artifacts', finalAppId, 'public', 'data', 'participants');
+const getLegacyParticipantRef = (participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'participants', participantId);
+const getActiveParticipantRef = (sessionId, participantId) => participantStorageMode === 'legacy' ? getLegacyParticipantRef(participantId) : getParticipantRef(sessionId, participantId);
+
 window.tempLiveSelection = null;
 
 const AVATARS = ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦", "🐤", "🦄", "🐝", "🦋", "🐌", "🐞", "🐙", "🐬"];
 
-// ----------------------------------------------------------------------
-// 3. HELPER ФУНКЦИИ (без Firebase пътища)
-// ----------------------------------------------------------------------
+// --- SAFE DOM HELPERS ---
 const safeSetText = (id, text) => {
     const el = document.getElementById(id);
     if (el) el.innerText = text;
@@ -76,6 +73,71 @@ const safeSetHTML = (id, html) => {
     if (el) el.innerHTML = html;
 };
 
+// --- AUTH LOGIC ---
+onAuthStateChanged(auth, async (u) => {
+    const incomingUid = u?.uid || null;
+    if (lastAuthUid !== incomingUid) {
+        myQuizzes = [];
+        soloResults = [];
+        if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
+        if (document.getElementById('solo-results-body')) renderSoloResults();
+    }
+    lastAuthUid = incomingUid;
+    user = u;
+    document.getElementById('auth-loader')?.classList.add('hidden');
+
+    if (user) {
+        const isAnon = user.isAnonymous;
+        const uidDisplay = isAnon ? `Анонимен (${user.uid.substring(0,5)}...)` : user.email;
+        const debugUidEl = document.getElementById('debug-uid');
+        if(debugUidEl) debugUidEl.innerText = uidDisplay;
+
+        const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
+        try {
+            const profileSnap = await getDoc(profileRef);
+            if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
+                isTeacher = true;
+                window.loadMyQuizzes();
+                window.loadSoloResults();
+                if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
+                    window.switchScreen('teacher-dashboard');
+                }
+            } else if (!isAnon) {
+                window.switchScreen('welcome');
+            }
+        } catch (e) {
+            console.error("Cloud Access Error:", e);
+            if (e.code === 'permission-denied') window.showRulesHelpModal();
+        }
+    } else {
+        window.switchScreen('welcome');
+    }
+});
+
+const initAuth = async () => {
+    await setPersistence(auth, browserLocalPersistence);
+
+    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        try {
+            await signInWithCustomToken(auth, __initial_auth_token);
+        } catch (e) {
+            if (e.code === 'auth/custom-token-mismatch') {
+                console.warn("Служебният токен е игнориран (Private Config).");
+            } else {
+                console.error("Custom token auth failed", e);
+            }
+        }
+    }
+};
+
+setTimeout(() => {
+    const loader = document.getElementById('auth-loader');
+    if (loader && !loader.classList.contains('hidden')) loader.classList.add('hidden');
+}, 4000);
+
+initAuth();
+
+// --- HELPER FUNCTIONS ---
 window.decodeQuizCode = (code) => {
     if (!code) return null;
     try {
@@ -199,6 +261,7 @@ window.quitHostSession = () => {
     }
 };
 
+// --- PERMISSION ERROR HANDLER ---
 window.showRulesHelpModal = () => {
     if (rulesModalShown) return;
     rulesModalShown = true;
@@ -206,72 +269,7 @@ window.showRulesHelpModal = () => {
     document.getElementById('modal-rules-help').classList.add('flex');
 };
 
-// ----------------------------------------------------------------------
-// 4. AUTH ЛОГИКА
-// ----------------------------------------------------------------------
-onAuthStateChanged(auth, async (u) => {
-    const incomingUid = u?.uid || null;
-    if (lastAuthUid !== incomingUid) {
-        myQuizzes = [];
-        soloResults = [];
-        if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
-        if (document.getElementById('solo-results-body')) renderSoloResults();
-    }
-    lastAuthUid = incomingUid;
-    user = u;
-    document.getElementById('auth-loader')?.classList.add('hidden');
-
-    if (user) {
-        const isAnon = user.isAnonymous;
-        const uidDisplay = isAnon ? `Анонимен (${user.uid.substring(0,5)}...)` : user.email;
-        const debugUidEl = document.getElementById('debug-uid');
-        if(debugUidEl) debugUidEl.innerText = uidDisplay;
-
-        const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
-        try {
-            const profileSnap = await getDoc(profileRef);
-            if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
-                isTeacher = true;
-                window.loadMyQuizzes();
-                window.loadSoloResults();
-                if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
-                    window.switchScreen('teacher-dashboard');
-                }
-            } else if (!isAnon) {
-                window.switchScreen('welcome');
-            }
-        } catch (e) {
-            console.error("Cloud Access Error:", e);
-            if (e.code === 'permission-denied') window.showRulesHelpModal();
-        }
-    } else {
-        window.switchScreen('welcome');
-    }
-});
-
-const initAuth = async () => {
-    await setPersistence(auth, browserLocalPersistence);
-
-    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        try {
-            await signInWithCustomToken(auth, __initial_auth_token);
-        } catch (e) {
-            if (e.code === 'auth/custom-token-mismatch') {
-                console.warn("Служебният токен е игнориран (Private Config).");
-            } else {
-                console.error("Custom token auth failed", e);
-            }
-        }
-    }
-};
-
-setTimeout(() => {
-    const loader = document.getElementById('auth-loader');
-    if (loader && !loader.classList.contains('hidden')) loader.classList.add('hidden');
-}, 4000);
-
-initAuth();
-
+// --- AUTH HANDLERS ---
 window.toggleAuthMode = () => {
     authMode = authMode === 'login' ? 'register' : 'login';
     const title = document.getElementById('auth-title');
@@ -375,9 +373,7 @@ window.handleLogout = async () => {
     }, 1000);
 };
 
-// ----------------------------------------------------------------------
-// 5. IMPORT / EXPORT (импортиране на уроци)
-// ----------------------------------------------------------------------
+// --- IMPORT / EXPORT LOGIC ---
 window.openImportModal = () => {
     document.getElementById('import-code-input').value = "";
     document.getElementById('modal-import').classList.remove('hidden');
@@ -417,9 +413,7 @@ window.saveImportedQuiz = async (data) => {
     }
 };
 
-// ----------------------------------------------------------------------
-// 6. FIREBASE DATA OPS (моите уроци, резултати)
-// ----------------------------------------------------------------------
+// --- FIREBASE DATA OPS ---
 window.loadMyQuizzes = async () => {
     if (!user) return;
     const q = collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes');
@@ -520,9 +514,7 @@ function renderSoloResults() {
     if (window.lucide) lucide.createIcons();
 }
 
-// ----------------------------------------------------------------------
-// 7. LIVE HOST LOGIC (сесия на живо)
-// ----------------------------------------------------------------------
+// --- LIVE HOST LOGIC ---
 window.startHostFromLibrary = async (id) => {
     const quiz = myQuizzes.find(q => q.id === id);
     if (!quiz) return window.showMessage("Грешка при зареждане на урока.", "error");
@@ -755,9 +747,7 @@ window.finishLiveSession = async () => {
     }
 };
 
-// ----------------------------------------------------------------------
-// 8. EXCEL & PDF (без транслитерация, с кирилица)
-// ----------------------------------------------------------------------
+// --- EXCEL & PRINT LOGIC ---
 function getResultsData() {
     if (!currentQuiz || !lastFetchedParticipants) return [];
 
@@ -864,6 +854,85 @@ function getClassQuestionStats() {
     };
 }
 
+function getSoloResultsExportModel() {
+    const sortedResults = [...soloResults].sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp));
+    const attempts = sortedResults.map((r, idx) => {
+        const parsed = parseScoreValue(r.score);
+        const pct = parsed.total > 0 ? Math.round((parsed.score / parsed.total) * 100) : 0;
+        return {
+            idx: idx + 1,
+            studentName: r.studentName || '-',
+            quizTitle: r.quizTitle || '-',
+            dateTime: window.formatDate(r.timestamp),
+            scoreLabel: r.score || '-',
+            score: parsed.score,
+            total: parsed.total,
+            pct
+        };
+    });
+
+    const totalAttempts = attempts.length;
+    const totalScore = attempts.reduce((a, r) => a + r.score, 0);
+    const totalMax = attempts.reduce((a, r) => a + r.total, 0);
+    const avgPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
+
+    const byStudent = new Map();
+    attempts.forEach((r) => {
+        const prev = byStudent.get(r.studentName) || { attempts: 0, score: 0, total: 0 };
+        prev.attempts += 1;
+        prev.score += r.score;
+        prev.total += r.total;
+        byStudent.set(r.studentName, prev);
+    });
+
+    const studentSummary = Array.from(byStudent.entries()).map(([name, v]) => ({
+        name,
+        attempts: v.attempts,
+        scoreLabel: `${v.score}/${v.total}`,
+        pct: v.total > 0 ? Math.round((v.score / v.total) * 100) : 0
+    })).sort((a, b) => b.pct - a.pct || b.attempts - a.attempts);
+
+    return {
+        attempts,
+        studentSummary,
+        summary: { totalAttempts, totalScore, totalMax, avgPct }
+    };
+}
+
+window.exportSoloResultsExcel = () => {
+    const model = getSoloResultsExportModel();
+    if (model.attempts.length === 0) return window.showMessage("Няма индивидуални резултати за експорт.", "error");
+
+    const wb = XLSX.utils.book_new();
+
+    const summaryRows = [
+        ["ОБЩО ОПИТИ", model.summary.totalAttempts],
+        ["ОБЩ РЕЗУЛТАТ", `${model.summary.totalScore}/${model.summary.totalMax}`],
+        ["СРЕДЕН УСПЕХ", `${model.summary.avgPct}%`],
+        []
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Обобщение");
+
+    const attemptsRows = [
+        ["#", "Ученик", "Урок", "Дата/Час", "Точки", "% Успех"],
+        ...model.attempts.map(r => [r.idx, r.studentName, r.quizTitle, r.dateTime, r.scoreLabel, `${r.pct}%`])
+    ];
+    const wsAttempts = XLSX.utils.aoa_to_sheet(attemptsRows);
+    XLSX.utils.book_append_sheet(wb, wsAttempts, "Индивидуални_Опити");
+
+    const studentRows = [
+        ["Ученик", "Опити", "Точки", "% Успех"],
+        ...model.studentSummary.map(r => [r.name, r.attempts, r.scoreLabel, `${r.pct}%`])
+    ];
+    const wsStudents = XLSX.utils.aoa_to_sheet(studentRows);
+    XLSX.utils.book_append_sheet(wb, wsStudents, "По_Ученици");
+
+    const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
+    XLSX.writeFile(wb, `solo_results_${timestamp}.xlsx`);
+    window.showMessage("Индивидуалният отчет е изтеглен.");
+};
+
 window.exportExcel = () => {
     const data = getResultsData();
     if (data.length === 0) return window.showMessage("Няма данни за експорт.", "error");
@@ -969,9 +1038,7 @@ window.exportPDF = () => {
     window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси).");
 };
 
-// ----------------------------------------------------------------------
-// 9. STUDENT CLIENT LOGIC (ученик в сесия на живо)
-// ----------------------------------------------------------------------
+// --- STUDENT CLIENT LOGIC ---
 window.joinLiveSession = async () => {
     const pin = document.getElementById('live-pin').value.trim();
     studentNameValue = document.getElementById('live-student-name').value.trim();
@@ -1363,13 +1430,7 @@ const readQuestionWithSpeech = (text) => {
     }
 };
 
-// =========================================================================
-// !!! ТУК ПОСТАВЯТЕ ОСТАНАЛАТА ЛОГИКА ОТ СТАРИЯ app.js (без дублиране) !!!
-// =========================================================================
-
-// ----------------------------------------------------------------------
-// 10. SOLO LOGIC (индивидуален режим)
-// ----------------------------------------------------------------------
+// --- SOLO LOGIC ---
 window.startIndividual = async () => {
     const pinCode = document.getElementById('ind-quiz-code').value.trim();
     const decoded = window.decodeQuizCode(pinCode);
@@ -1403,15 +1464,8 @@ window.initSolvePlayer = () => {
     }
     document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
     solvePlayer = new YT.Player('solve-player', {
-        videoId: currentQuiz.v, 
-        width: '100%', 
-        height: '100%',
-        playerVars: { 
-            'autoplay': 1, 
-            'controls': 1, 
-            'rel': 0, 
-            'playsinline': 1
-        },
+        videoId: currentQuiz.v, width: '100%', height: '100%',
+        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1 },
         events: { 'onStateChange': (e) => {
             if (e.data === YT.PlayerState.ENDED) {
                 window.finishSoloGame();
@@ -1667,9 +1721,7 @@ window.finishSoloGame = async () => {
     }
 };
 
-// ----------------------------------------------------------------------
-// 11. EDITOR ENGINE (създаване и редактиране на уроци)
-// ----------------------------------------------------------------------
+// --- EDITOR ENGINE ---
 window.loadEditorVideo = (isEdit = false) => {
     const url = document.getElementById('yt-url')?.value;
     const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
@@ -1684,16 +1736,10 @@ window.loadEditorVideo = (isEdit = false) => {
     currentVideoId = id;
     document.getElementById('editor-view').classList.remove('hidden');
     document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
-    player = new YT.Player('player', { 
-        videoId: id, 
-        playerVars: {},
-        events: { 
-            'onReady': () => {
-                const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
-                activeIntervals.push(i);
-            }
-        }
-    });
+    player = new YT.Player('player', { videoId: id, events: { 'onReady': () => {
+        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
+        activeIntervals.push(i);
+    }}});
     if (!isEdit) { questions = []; editingQuizId = null; }
     renderEditorList();
 };
@@ -1972,9 +2018,7 @@ window.deleteQuiz = async (id) => {
     }
 };
 
-// ----------------------------------------------------------------------
-// 12. YT API
-// ----------------------------------------------------------------------
+// --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
     console.log("YouTube API Ready");
