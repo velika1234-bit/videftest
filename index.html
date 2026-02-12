@@ -69,13 +69,6 @@
                     <h2 class="text-2xl font-black text-indigo-400">Учители</h2>
                     <p class="text-[10px] text-slate-400 uppercase font-black">Вход и Регистрация</p>
                     <button onclick="window.switchScreen('teacher-auth')" class="mt-auto w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Влез в панел</button>
-                    <!-- Бутон за помощ при блокиран достъп -->
-<div class="flex justify-center mt-6">
-    <button onclick="window.requestStorageAccess()" class="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl text-xs font-black uppercase shadow-lg transition-all flex items-center gap-2">
-        <i data-lucide="shield-alert" class="w-4 h-4"></i>
-        Разреши достъп (ако висите)
-    </button>
-</div>
                 </div>
             </div>
         </div>
@@ -87,7 +80,6 @@
                 <div class="flex flex-wrap gap-2 justify-center">
                     <button onclick="window.switchScreen('create')" class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-indigo-100">+ Нов Урок</button>
                     <button onclick="window.openImportModal()" class="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-emerald-100">Импорт с код</button>
-                    <button id="admin-panel-btn" onclick="window.openAdminPanel()" class="hidden bg-purple-700 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-purple-200">📊 Админ панел</button>
                     <button onclick="window.handleLogout()" class="bg-slate-100 text-slate-500 px-8 py-4 rounded-2xl font-black uppercase text-[10px]">Изход</button>
                 </div>
             </div>
