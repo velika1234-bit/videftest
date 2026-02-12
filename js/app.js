@@ -1977,7 +1977,21 @@ window.deleteQuiz = async (id) => {
         window.showMessage("Урокът е изтрит.", "info");
     }
 };
-
+// --- Разрешаване на достъп до хранилище (за блокирани ученици) ---
+window.requestStorageAccess = async function() {
+    try {
+        if (document.requestStorageAccess) {
+            await document.requestStorageAccess();
+            window.showMessage("✅ Достъпът е разрешен! Моля, презаредете страницата.", "success");
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            window.showMessage("ℹ️ Вашият браузър не поддържа тази функция. Моля, разрешете 'Достъп до хранилище' от адресната лента.", "info");
+        }
+    } catch (e) {
+        console.error(e);
+        window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
+    }
+};
 // --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
