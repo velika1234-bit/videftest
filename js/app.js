@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
 // --- FIREBASE CONFIGURATION ---
@@ -18,7 +19,7 @@ const finalAppId = 'videoquiz-ultimate-live';
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-
+const functions = getFunctions(app, 'us-central1');
 // --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
@@ -81,6 +82,16 @@ onAuthStateChanged(auth, async (u) => {
         soloResults = [];
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
+        // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
+const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; // ⚠️ ЗАМЕНИ!
+const adminBtn = document.getElementById('admin-panel-btn');
+if (adminBtn) {
+  if (user && user.uid === ADMIN_UID) {
+    adminBtn.classList.remove('hidden');
+  } else {
+    adminBtn.classList.add('hidden');
+  }
+}
     }
     lastAuthUid = incomingUid;
     user = u;
@@ -1991,6 +2002,30 @@ window.requestStorageAccess = async function() {
         console.error(e);
         window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
     }
+};
+// --- АДМИНИСТРАТОРСКИ ПАНЕЛ (само за admin) ---
+window.openAdminPanel = async function() {
+  try {
+    window.showMessage("📊 Зареждам статистики...", "info");
+    
+    const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
+    const result = await getAdminStatsFunc();
+    const stats = result.data;
+    
+    const message = `📊 АДМИН СТАТИСТИКИ:
+━━━━━━━━━━━━━━━━━━━━━
+👥 Учители: ${stats.totalTeachers}
+📚 Уроци: ${stats.totalQuizzes}
+📝 Соло резултати: ${stats.totalSoloResults}
+🎬 Сесии на живо: ${stats.totalSessions}
+👩‍🎓 Участници (общо): ${stats.totalParticipants}
+━━━━━━━━━━━━━━━━━━━━━`;
+    
+    window.showMessage(message, "info", 15000); // показва се 15 секунди
+  } catch (error) {
+    console.error("Admin panel error:", error);
+    window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
+  }
 };
 // --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
