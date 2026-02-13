@@ -22,7 +22,7 @@ import {
     formatTime, formatDate, parseScoreValue, decodeQuizCode, 
     AVATARS, getTimestampMs, shuffleArray 
 } from './utils.js';
-
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- Firebase конфигурация ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -2053,6 +2053,30 @@ window.deleteQuiz = async (id) => {
 // ----------------------------------------------------------------------
 // 12. YT API
 // ----------------------------------------------------------------------
+// --- АДМИНИСТРАТОРСКИ ПАНЕЛ ---
+window.openAdminPanel = async function() {
+  try {
+    window.showMessage("📊 Зареждам статистики...", "info");
+    
+    const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
+    const result = await getAdminStatsFunc();
+    const stats = result.data;
+    
+    const message = `📊 АДМИН СТАТИСТИКИ:
+━━━━━━━━━━━━━━━━━━━━━
+👥 Учители: ${stats.totalTeachers}
+📚 Уроци: ${stats.totalQuizzes}
+📝 Соло резултати: ${stats.totalSoloResults}
+🎬 Сесии на живо: ${stats.totalSessions}
+👩‍🎓 Участници (общо): ${stats.totalParticipants}
+━━━━━━━━━━━━━━━━━━━━━`;
+    
+    window.showMessage(message, "info", 15000); // показва се 15 секунди
+  } catch (error) {
+    console.error("Admin panel error:", error);
+    window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
+  }
+};
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
     console.log("YouTube API Ready");
