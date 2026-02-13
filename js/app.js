@@ -543,6 +543,42 @@ window.openLiveHost = async () => {
     sessionDocId = sessionID;
     window.switchScreen('live-host');
     document.getElementById('host-pin').innerText = sessionID;
+        // --- Генериране на QR код за бърз достъп ---
+    try {
+        const baseUrl = window.location.origin + window.location.pathname;
+        const joinUrl = `${baseUrl}?join=${sessionID}`;
+
+        const qrContainer = document.getElementById('qr-code');
+        if (qrContainer) {
+            qrContainer.innerHTML = ''; // изчистваме предишно съдържание
+
+            const qr = qrcode(0, 'H');
+            qr.addData(joinUrl);
+            qr.make();
+
+            const canvas = document.createElement('canvas');
+            canvas.width = qr.getModuleCount() * 4;
+            canvas.height = qr.getModuleCount() * 4;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000000';
+
+            for (let row = 0; row < qr.getModuleCount(); row++) {
+                for (let col = 0; col < qr.getModuleCount(); col++) {
+                    if (qr.isDark(row, col)) {
+                        ctx.fillRect(col * 4, row * 4, 4, 4);
+                    }
+                }
+            }
+
+            qrContainer.appendChild(canvas);
+            document.getElementById('qr-container').classList.remove('hidden');
+        }
+    } catch (e) {
+        console.error('Грешка при генериране на QR код:', e);
+        // Ако не успеем, просто не показваме QR – не е критично
+    }
 
     const totalPoints = currentQuiz.q.reduce((a, q) => a + (q.points || 1), 0);
 
