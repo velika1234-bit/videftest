@@ -239,7 +239,7 @@ onAuthStateChanged(auth, async (u) => {
         window.switchScreen('welcome');
     }
      // 👇 **ТУК ДОБАВЯМЕ КОДА ЗА АДМИН БУТОНА**
-    const ADMIN_UID = 'постави-тук-UID-от-Firebase-Console'; // 🔁 ЗАМЕНИ!
+    const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; // 🔁 ЗАМЕНИ!
     const adminBtn = document.getElementById('admin-panel-btn');
     if (adminBtn) {
         if (user && user.uid === ADMIN_UID) {
