@@ -238,6 +238,16 @@ onAuthStateChanged(auth, async (u) => {
     } else {
         window.switchScreen('welcome');
     }
+     // 👇 **ТУК ДОБАВЯМЕ КОДА ЗА АДМИН БУТОНА**
+    const ADMIN_UID = 'постави-тук-UID-от-Firebase-Console'; // 🔁 ЗАМЕНИ!
+    const adminBtn = document.getElementById('admin-panel-btn');
+    if (adminBtn) {
+        if (user && user.uid === ADMIN_UID) {
+            adminBtn.classList.remove('hidden');
+        } else {
+            adminBtn.classList.add('hidden');
+        }
+    }
 });
 
 const initAuth = async () => {
