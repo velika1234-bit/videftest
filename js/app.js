@@ -946,6 +946,7 @@ window.exportPDF = () => {
 
     const [head, ...body] = data;
 
+    // Заглавие и дата – вече на български, без транслитерация
     doc.setFont('times', 'bold');
     doc.setFontSize(16);
     doc.text(`VideoQuiz - Резултати от сесия ${sessionID}`, 40, 40);
@@ -953,6 +954,7 @@ window.exportPDF = () => {
     doc.setFontSize(10);
     doc.text(`Дата: ${new Date().toLocaleString('bg-BG')}`, 40, 58);
 
+    // Таблица с резултати
     doc.autoTable({
         head: [head],
         body: body,
@@ -963,10 +965,11 @@ window.exportPDF = () => {
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
 
+    // Аналитична таблица
     const analyticsHead = [['№', 'Въпрос', 'Верни', 'Грешни', 'Без отговор', '% Верни', '% Грешни', 'Първи верен', 'Време (s)']];
     const analyticsBody = analytics.rows.map((r) => [
         r.qIdx + 1,
-        r.questionText,
+        r.questionText,          // оригинален български текст
         r.correct,
         r.wrong,
         r.missing,
@@ -991,11 +994,10 @@ window.exportPDF = () => {
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
 
-    const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
     doc.save(`results_${sessionID}_${timestamp}.pdf`);
-    window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси)");
+    window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси).");
 };
-
 // ----------------------------------------------------------------------
 // 9. STUDENT CLIENT LOGIC (ученик в сесия на живо)
 // ----------------------------------------------------------------------
