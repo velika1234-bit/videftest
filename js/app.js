@@ -2069,6 +2069,14 @@ window.openAdminPanel = async function() {
     console.log('📊 openAdminPanel called');
     console.log('auth.currentUser:', auth.currentUser); // трябва да покаже потребителя
     console.log('functions object:', functions);        // трябва да покаже обект
+    if (!auth.currentUser) {
+      window.showMessage("❌ Не сте влезли. Моля, влезте отново.", "error");
+      return;
+    }
+
+    // ✅ ПРИНУДИТЕЛНО ОБНОВЯВАНЕ НА ТОКЕНА
+    const token = await auth.currentUser.getIdToken(true);
+    console.log('✅ Токен обновен:', token.substring(0, 20) + '...');
 
     window.showMessage("📊 Зареждам статистики...", "info");
     
