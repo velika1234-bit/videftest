@@ -220,52 +220,8 @@ onAuthStateChanged(auth, async (u) => {
 
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
         try {
-     const profileSnap = await getDoc(profileRef);
-   if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
-    // Актуализиране на стари профили (без име и статус)
-    const profileData = profileSnap.data();
-    const updates = {};
-    if (!profileData.name) {
-        updates.name = '(Без име)';
-    }
-    if (!profileData.status) {
-        updates.status = 'active'; // За старите учители – веднага активни
-    }
-    if (Object.keys(updates).length > 0) {
-        await updateDoc(profileRef, updates);
-        // Прочети отново профила, за да имаш актуалните данни
-        const updatedSnap = await getDoc(profileRef);
-        profileData = updatedSnap.data();
-    }
-
-    // --- НОВО: Проверка на статуса ---
-    if (profileData.status === 'pending') {
-        window.showMessage("⏳ Вашият профил чака одобрение от администратор.", "info");
-        window.switchScreen('welcome');
-        return; // Важно: спира изпълнението
-    }
-
-    if (profileData.status === 'suspended') {
-        window.showMessage("❌ Профилът ви е деактивиран. Свържете се с администратор.", "error");
-        window.switchScreen('welcome');
-        return; // Важно: спира изпълнението
-    }
-
-    // Само active учителите продължават нататък
-    isTeacher = true;
-    window.loadMyQuizzes();
-    window.loadSoloResults();
-    if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
-        window.switchScreen('teacher-dashboard');
-    }
-} else if (!isAnon) {
-    window.switchScreen('welcome');
-}
-    isTeacher = true;
-    window.loadMyQuizzes();
-    window.loadSoloResults();
-    // ... останалата логика
-}
+            const profileSnap = await getDoc(profileRef);
+            if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
                 isTeacher = true;
                 window.loadMyQuizzes();
                 window.loadSoloResults();
@@ -356,16 +312,13 @@ window.handleAuthSubmit = async () => {
             if (code !== MASTER_TEACHER_CODE) return window.showMessage("Грешен код за учител!", "error");
 
             try {
-                const name = document.getElementById('auth-name').value.trim();
                 const cred = await createUserWithEmailAndPassword(auth, email, pass);
                 await setDoc(doc(db, 'artifacts', finalAppId, 'users', cred.user.uid, 'settings', 'profile'), {
                     role: 'teacher',
                     email: email,
                     emailNormalized: email.toLowerCase(),
-                    name: name,                           // ← ново поле
-                    status: 'pending',
-                    registeredAt: serverTimestamp()
-            });
+                    activatedAt: serverTimestamp()
+                });
                 window.showMessage("Успешна регистрация!");
                 window.switchScreen('teacher-dashboard');
             } catch (innerError) {
@@ -2116,14 +2069,6 @@ window.openAdminPanel = async function() {
     console.log('📊 openAdminPanel called');
     console.log('auth.currentUser:', auth.currentUser); // трябва да покаже потребителя
     console.log('functions object:', functions);        // трябва да покаже обект
-    if (!auth.currentUser) {
-      window.showMessage("❌ Не сте влезли. Моля, влезте отново.", "error");
-      return;
-    }
-
-    // ✅ ПРИНУДИТЕЛНО ОБНОВЯВАНЕ НА ТОКЕНА
-    const token = await auth.currentUser.getIdToken(true);
-    console.log('✅ Токен обновен:', token.substring(0, 20) + '...');
 
     window.showMessage("📊 Зареждам статистики...", "info");
     
