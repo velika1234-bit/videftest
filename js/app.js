@@ -221,12 +221,11 @@ onAuthStateChanged(auth, async (u) => {
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
         try {
      const profileSnap = await getDoc(profileRef);
-    if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
-    if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
-         // Актуализиране на стари профили (без име и статус)
-        const profileData = profileSnap.data();
-        const updates = {};
-        if (!profileData.name) {
+   if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
+    // Актуализиране на стари профили (без име и статус)
+    const profileData = profileSnap.data();
+    const updates = {};
+    if (!profileData.name) {
         updates.name = '(Без име)';
     }
     if (!profileData.status) {
@@ -234,8 +233,34 @@ onAuthStateChanged(auth, async (u) => {
     }
     if (Object.keys(updates).length > 0) {
         await updateDoc(profileRef, updates);
+        // Прочети отново профила, за да имаш актуалните данни
+        const updatedSnap = await getDoc(profileRef);
+        profileData = updatedSnap.data();
     }
-    
+
+    // --- НОВО: Проверка на статуса ---
+    if (profileData.status === 'pending') {
+        window.showMessage("⏳ Вашият профил чака одобрение от администратор.", "info");
+        window.switchScreen('welcome');
+        return; // Важно: спира изпълнението
+    }
+
+    if (profileData.status === 'suspended') {
+        window.showMessage("❌ Профилът ви е деактивиран. Свържете се с администратор.", "error");
+        window.switchScreen('welcome');
+        return; // Важно: спира изпълнението
+    }
+
+    // Само active учителите продължават нататък
+    isTeacher = true;
+    window.loadMyQuizzes();
+    window.loadSoloResults();
+    if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
+        window.switchScreen('teacher-dashboard');
+    }
+} else if (!isAnon) {
+    window.switchScreen('welcome');
+}
     isTeacher = true;
     window.loadMyQuizzes();
     window.loadSoloResults();
