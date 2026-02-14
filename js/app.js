@@ -2066,6 +2066,10 @@ window.deleteQuiz = async (id) => {
 // --- АДМИНИСТРАТОРСКИ ПАНЕЛ ---
 window.openAdminPanel = async function() {
   try {
+    console.log('📊 openAdminPanel called');
+    console.log('auth.currentUser:', auth.currentUser); // трябва да покаже потребителя
+    console.log('functions object:', functions);        // трябва да покаже обект
+
     window.showMessage("📊 Зареждам статистики...", "info");
     
     const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
@@ -2081,7 +2085,7 @@ window.openAdminPanel = async function() {
 👩‍🎓 Участници (общо): ${stats.totalParticipants}
 ━━━━━━━━━━━━━━━━━━━━━`;
     
-    window.showMessage(message, "info", 15000); // показва се 15 секунди
+    window.showMessage(message, "info", 15000);
   } catch (error) {
     console.error("Admin panel error:", error);
     window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
