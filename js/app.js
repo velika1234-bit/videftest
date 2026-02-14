@@ -220,8 +220,27 @@ onAuthStateChanged(auth, async (u) => {
 
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
         try {
-            const profileSnap = await getDoc(profileRef);
-            if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
+     const profileSnap = await getDoc(profileRef);
+    if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
+    if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
+         // Актуализиране на стари профили (без име и статус)
+        const profileData = profileSnap.data();
+        const updates = {};
+        if (!profileData.name) {
+        updates.name = '(Без име)';
+    }
+    if (!profileData.status) {
+        updates.status = 'active'; // За старите учители – веднага активни
+    }
+    if (Object.keys(updates).length > 0) {
+        await updateDoc(profileRef, updates);
+    }
+    
+    isTeacher = true;
+    window.loadMyQuizzes();
+    window.loadSoloResults();
+    // ... останалата логика
+}
                 isTeacher = true;
                 window.loadMyQuizzes();
                 window.loadSoloResults();
@@ -312,13 +331,16 @@ window.handleAuthSubmit = async () => {
             if (code !== MASTER_TEACHER_CODE) return window.showMessage("Грешен код за учител!", "error");
 
             try {
+                const name = document.getElementById('auth-name').value.trim();
                 const cred = await createUserWithEmailAndPassword(auth, email, pass);
                 await setDoc(doc(db, 'artifacts', finalAppId, 'users', cred.user.uid, 'settings', 'profile'), {
                     role: 'teacher',
                     email: email,
                     emailNormalized: email.toLowerCase(),
-                    activatedAt: serverTimestamp()
-                });
+                    name: name,                           // ← ново поле
+                    status: 'pending',
+                    registeredAt: serverTimestamp()
+            });
                 window.showMessage("Успешна регистрация!");
                 window.switchScreen('teacher-dashboard');
             } catch (innerError) {
