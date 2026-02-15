@@ -412,7 +412,7 @@
                 <div class="text-center space-y-2">
                     <div class="w-20 h-20 bg-rose-100 text-rose-500 rounded-3xl flex items-center justify-center mx-auto text-4xl mb-4 animate-bounce">⚠️</div>
                     <h2 class="text-3xl font-black text-slate-900">Достъпът е отказан</h2>
-                    <p class="text-slate-500 font-bold">Базата данни във Firebase е "заключена".</p>
+                    <p class="text-slate-500 font-bold">Базата данни във Firebase е с ограничени правила или сте в грешен акаунт.</p>
                 </div>
 
                 <div class="bg-slate-50 p-6 rounded-[2rem] border-2 border-indigo-100 space-y-4">
@@ -421,6 +421,7 @@
                         <li>Отворете <a href="https://console.firebase.google.com/" target="_blank" class="text-indigo-600 underline">Firebase Console</a> и влезте във вашия проект.</li>
                         <li>Отидете на <strong>Build</strong> -> <strong>Firestore Database</strong>.</li>
                         <li>Кликнете на таба <strong>Rules</strong> (горе в средата).</li>
+                        <li>Уверете се, че сте влезли с <strong>admin</strong> акаунта (UID: <code class="font-mono">uNdGTBsgatZX4uOPTZqKG9qLJVZ2</code>).</li>
                         <li>Изтрийте всичко там и поставете този код:</li>
                     </ol>
                     
@@ -444,7 +445,8 @@ service cloud.firestore {
       }
 
       match /public/data/{document=**} {
-        allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
+        allow read: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
+        allow write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'] &amp;&amp; isSignedIn();
       }
 
       match /users/{userId}/{document=**} {
@@ -464,7 +466,7 @@ service cloud.firestore {
 }</pre>
                     </div>
                     
-                    <p class="text-xs text-slate-400 text-center font-bold uppercase mt-2">След това натиснете "Publish" и презаредете тази страница.</p>
+                    <p class="text-xs text-slate-400 text-center font-bold uppercase mt-2">След това натиснете "Publish", влезте с admin акаунта и презаредете тази страница.</p>
                 </div>
 
                 <button onclick="location.reload()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase shadow-xl hover:bg-indigo-700 transition-all text-sm shadow-indigo-200">Готово, презареди!</button>
