@@ -89,14 +89,14 @@ const safeSetHTML = (id, html) => {
 
 const resolveAccessLevel = (profile = {}, uid = null) => {
     if (uid && uid === ADMIN_UID) return 'admin';
-    if (!profile || Object.keys(profile).length === 0) return 'guest';
+    if (!profile || Object.keys(profile).length === 0) return null;
     const level = String(profile?.accessLevel || '').toLowerCase();
     if (level === 'admin' || level === 'teacher' || level === 'tester') return level;
     const role = String(profile?.role || '').toLowerCase();
     if (role === 'admin') return 'admin';
     if (role === 'teacher') return 'teacher';
     if (role === 'tester') return 'tester';
-    return 'guest';
+    return null;
 };
 
 const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.guest;
