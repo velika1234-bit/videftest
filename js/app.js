@@ -60,7 +60,7 @@ const getActiveParticipantRef = (sessionId, participantId) => participantStorage
 
 window.tempLiveSelection = null;
 
-const AVATARS = ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦", "🐤", "🦄", "🐝", "🦋", "🐌", "🐞", "🐙", "🐬"];
+
 
 // --- SAFE DOM HELPERS ---
 const safeSetText = (id, text) => {
