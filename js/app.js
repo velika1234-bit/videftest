@@ -19,6 +19,7 @@ const firebaseConfig = {
 };
 
 const finalAppId = 'videoquiz-ultimate-live';
+const legacyAppId = 'videoquiz-ultimate';
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -57,6 +58,7 @@ let isDiscussionMode = false;
 
 // Helper functions for Firestore paths
 const getTeacherSoloResultsCollection = (teacherId) => collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
+const getTeacherQuizzesCollection = (teacherId, appId = finalAppId) => collection(db, 'artifacts', appId, 'users', teacherId, 'my_quizzes');
 const getSessionRefById = (id) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
 const getParticipantsCollection = (id) => collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id, 'participants');
 const getParticipantRef = (sessionId, participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', sessionId, 'participants', participantId);
@@ -412,7 +414,7 @@ window.saveImportedQuiz = async (data) => {
     if (!user) return;
     window.showMessage("Импортиране...");
     try {
-        await addDoc(collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes'), {
+        await addDoc(getTeacherQuizzesCollection(user.uid), {
             title: data.title + " (Импортиран)", v: data.v, questions: data.q, createdAt: serverTimestamp()
         });
         window.showMessage("Урокът е добавен!", "info");
@@ -425,17 +427,37 @@ window.saveImportedQuiz = async (data) => {
 // --- FIREBASE DATA OPS ---
 window.loadMyQuizzes = async () => {
     if (!user) return;
-    const q = collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes');
-    const unsub = onSnapshot(q, (snap) => {
-        myQuizzes = snap.docs
-            .map(d => normalizeStoredQuiz({ ...d.data(), id: d.id }))
-            .filter(q => !!q?.id);
+
+    const snapshotsBySource = new Map();
+    const rebuildAndRender = () => {
+        const mergedByKey = new Map();
+        snapshotsBySource.forEach((docs, sourceAppId) => {
+            docs.forEach((quizDoc) => {
+                const normalized = normalizeStoredQuiz(quizDoc);
+                if (!normalized?.id) return;
+                mergedByKey.set(`${sourceAppId}:${normalized.id}`, normalized);
+            });
+        });
+        myQuizzes = Array.from(mergedByKey.values());
         renderMyQuizzes();
-    }, (error) => {
-        console.error("My quizzes error:", error);
-        if (error.code === 'permission-denied') window.showRulesHelpModal();
-    });
-    unsubscribes.push(unsub);
+    };
+
+    const attachListener = (appId) => {
+        const q = getTeacherQuizzesCollection(user.uid, appId);
+        const unsub = onSnapshot(q, (snap) => {
+            snapshotsBySource.set(appId, snap.docs.map((d) => ({ ...d.data(), id: d.id })));
+            rebuildAndRender();
+        }, (error) => {
+            console.error(`My quizzes error (${appId}):`, error);
+            if (error.code === 'permission-denied') window.showRulesHelpModal();
+        });
+        unsubscribes.push(unsub);
+    };
+
+    attachListener(finalAppId);
+    if (legacyAppId !== finalAppId) {
+        attachListener(legacyAppId);
+    }
 };
 
 window.loadSoloResults = async () => {
@@ -2017,8 +2039,8 @@ window.saveQuizToLibrary = async () => {
     try {
         const data = { title, v: currentVideoId, questions, updatedAt: serverTimestamp() };
         if (!editingQuizId) data.createdAt = serverTimestamp();
-        if (editingQuizId) await updateDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', editingQuizId), data);
-        else await addDoc(collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes'), data);
+        if (editingQuizId) await updateDoc(doc(getTeacherQuizzesCollection(user.uid), editingQuizId), data);
+        else await addDoc(getTeacherQuizzesCollection(user.uid), data);
         window.showMessage("Урокът е запазен!", "info");
         editingQuizId = null;
         window.switchScreen('teacher-dashboard');
@@ -2064,7 +2086,7 @@ window.editQuiz = (id) => {
 window.deleteQuiz = async (id) => {
     if (!user) return;
     if (confirm("Изтриване на урока?")) {
-        await deleteDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', id));
+        await deleteDoc(doc(getTeacherQuizzesCollection(user.uid), id));
         window.showMessage("Урокът е изтрит.", "info");
     }
 };
