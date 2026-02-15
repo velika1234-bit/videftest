@@ -444,7 +444,8 @@ service cloud.firestore {
       }
 
       match /public/data/{document=**} {
-        allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
+        allow read: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
+        allow write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'] &amp;&amp; isSignedIn();
       }
 
       match /users/{userId}/{document=**} {

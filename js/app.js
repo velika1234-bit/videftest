@@ -51,11 +51,12 @@ let participantStorageMode = 'legacy';
 let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
-let currentAccessLevel = 'tester';
+let currentAccessLevel = 'guest';
 const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
 const MASTER_TEACHER_CODE = "vilidaf76";
 const MASTER_TESTER_CODE = "tester3";
 const ACCESS_LIMITS = {
+    guest: 0,
     tester: 3,
     teacher: 20,
     admin: Number.POSITIVE_INFINITY
@@ -88,15 +89,17 @@ const safeSetHTML = (id, html) => {
 
 const resolveAccessLevel = (profile = {}, uid = null) => {
     if (uid && uid === ADMIN_UID) return 'admin';
+    if (!profile || Object.keys(profile).length === 0) return 'guest';
     const level = String(profile?.accessLevel || '').toLowerCase();
     if (level === 'admin' || level === 'teacher' || level === 'tester') return level;
     const role = String(profile?.role || '').toLowerCase();
     if (role === 'admin') return 'admin';
     if (role === 'teacher') return 'teacher';
-    return 'tester';
+    if (role === 'tester') return 'tester';
+    return 'guest';
 };
 
-const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.tester;
+const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.guest;
 
 const canCreateMoreLessons = () => {
     const limit = getLessonLimit();
@@ -110,10 +113,10 @@ const updateAccessUI = () => {
     const createBtn = document.getElementById('create-lesson-btn');
     const shareNote = document.getElementById('share-code-note');
     const limit = getLessonLimit();
-    const levelLabels = { tester: 'Тестер', teacher: 'Учител', admin: 'Администратор' };
+    const levelLabels = { guest: 'Без достъп', tester: 'Тестер', teacher: 'Учител', admin: 'Администратор' };
 
     if (titleEl) {
-        titleEl.innerText = `Права: ${levelLabels[currentAccessLevel] || 'Тестер'}`;
+        titleEl.innerText = `Права: ${levelLabels[currentAccessLevel] || 'Без достъп'}`;
     }
     if (detailsEl) {
         detailsEl.innerText = Number.isFinite(limit)
@@ -164,7 +167,7 @@ if (adminBtn) {
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
         try {
             const profileSnap = await getDoc(profileRef);
-            const profileData = profileSnap.exists() ? profileSnap.data() : {};
+            const profileData = profileSnap.exists() ? profileSnap.data() : null;
             currentAccessLevel = resolveAccessLevel(profileData, incomingUid);
             isTeacher = currentAccessLevel === 'teacher' || currentAccessLevel === 'admin' || currentAccessLevel === 'tester';
 
@@ -175,7 +178,7 @@ if (adminBtn) {
                 if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
                     window.switchScreen('teacher-dashboard');
                 }
-            } else if (!isAnon) {
+            } else {
                 window.switchScreen('welcome');
             }
         } catch (e) {
@@ -183,7 +186,7 @@ if (adminBtn) {
             if (e.code === 'permission-denied') window.showRulesHelpModal();
         }
     } else {
-        currentAccessLevel = 'tester';
+        currentAccessLevel = 'guest';
         updateAccessUI();
         window.switchScreen('welcome');
     }
