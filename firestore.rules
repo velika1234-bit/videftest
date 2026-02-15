@@ -22,8 +22,9 @@ service cloud.firestore {
       }
 
       match /public/data/{document=**} {
-        // Публична част (join/live flow)
-        allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
+        // Публична част (join/live flow): четене е публично, запис само за логнати.
+        allow read: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
+        allow write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'] && isSignedIn();
       }
 
       match /users/{userId}/{document=**} {
