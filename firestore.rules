@@ -5,9 +5,23 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // UID на администраторския профил
+    // Админ достъп: master UID или profile с role/accessLevel = admin (current + legacy app scope)
+    function hasAdminProfileIn(appId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/users/$(request.auth.uid)/settings/profile)
+             && (
+               get(/databases/$(database)/documents/artifacts/$(appId)/users/$(request.auth.uid)/settings/profile).data.accessLevel == 'admin'
+               || get(/databases/$(database)/documents/artifacts/$(appId)/users/$(request.auth.uid)/settings/profile).data.role == 'admin'
+             );
+    }
+
+    function hasAdminProfile() {
+      return hasAdminProfileIn('videoquiz-ultimate-live') || hasAdminProfileIn('videoquiz-ultimate');
+    }
+
+    // ВАЖНО: тук трябва да има само ЕДИН return ред (без дублиране).
     function isAdmin() {
-      return isSignedIn() && request.auth.uid == 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
+      return isSignedIn() && (request.auth.uid == 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2' || hasAdminProfile());
     }
 
     // Правила за current + legacy scope
@@ -22,8 +36,9 @@ service cloud.firestore {
       }
 
       match /public/data/{document=**} {
-        // Публична част (join/live flow)
-        allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
+        // Публична част (join/live flow): четене е публично, запис само за логнати.
+        allow read: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
+        allow write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'] && isSignedIn();
       }
 
       match /users/{userId}/{document=**} {
