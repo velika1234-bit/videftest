@@ -152,6 +152,14 @@ setTimeout(() => {
 
 initAuth();
 
+setTimeout(() => {
+    const anyVisible = Array.from(document.querySelectorAll('#app > div')).some(div => !div.classList.contains('hidden'));
+    if (!anyVisible) {
+        console.warn('No visible screen detected. Recovering to welcome screen.');
+        window.switchScreen('welcome');
+    }
+}, 1200);
+
 // --- HELPER FUNCTIONS ---
 window.resolveTeacherUidFromCode = async (decoded) => {
     if (!decoded) return null;
@@ -215,7 +223,13 @@ const normalizeQuizPayload = (rawQuiz) => {
 window.switchScreen = (name) => {
     document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
     const target = document.getElementById('screen-' + name);
-    if (target) target.classList.remove('hidden');
+    if (target) {
+        target.classList.remove('hidden');
+    } else {
+        const fallback = document.getElementById('screen-welcome');
+        fallback?.classList.remove('hidden');
+        console.warn(`Unknown screen: ${name}. Falling back to welcome.`);
+    }
 
     if (player) { try { player.destroy(); } catch(e) {} player = null; }
     if (solvePlayer) { try { solvePlayer.destroy(); } catch(e) {} solvePlayer = null; }
