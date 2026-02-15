@@ -89,10 +89,10 @@ onAuthStateChanged(auth, async (u) => {
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
         // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
-const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; // ⚠️ ЗАМЕНИ!
+const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
 const adminBtn = document.getElementById('admin-panel-btn');
 if (adminBtn) {
-  if (user && user.uid === ADMIN_UID) {
+  if (incomingUid === ADMIN_UID) {
     adminBtn.classList.remove('hidden');
   } else {
     adminBtn.classList.add('hidden');
@@ -449,7 +449,13 @@ window.loadMyQuizzes = async () => {
             rebuildAndRender();
         }, (error) => {
             console.error(`My quizzes error (${appId}):`, error);
-            if (error.code === 'permission-denied') window.showRulesHelpModal();
+            if (error.code === 'permission-denied') {
+                if (appId === legacyAppId) {
+                    console.warn('Legacy app scope is not readable with current Firestore rules. Continuing with current scope only.');
+                    return;
+                }
+                window.showRulesHelpModal();
+            }
         });
         unsubscribes.push(unsub);
     };
