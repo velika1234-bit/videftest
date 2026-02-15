@@ -1,9 +1,12 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
+
+// Backward-compatible globals (за стари извиквания window.formatDate/window.formatTime)
+window.formatDate = formatDate;
+window.formatTime = formatTime;
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -15,19 +18,17 @@ const firebaseConfig = {
 };
 
 const finalAppId = 'videoquiz-ultimate-live';
+const legacyAppId = 'videoquiz-ultimate';
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const functions = getFunctions(app, 'us-central1');
 // --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
 let isTeacher = false;
 let editingQuizId = null;
 let editingQuestionIndex = null;
-const MASTER_TEACHER_CODE = "vilidaf76";
-
 let player, solvePlayer, hostPlayer;
 let questions = [], currentQuiz = null, studentNameValue = "";
 let sessionID = "", liveActiveQIdx = -1;
@@ -50,15 +51,26 @@ let participantStorageMode = 'legacy';
 let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
+let currentAccessLevel = 'tester';
+const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
+const MASTER_TEACHER_CODE = "vilidaf76";
+const MASTER_TESTER_CODE = "tester3";
+const ACCESS_LIMITS = {
+    tester: 3,
+    teacher: 20,
+    admin: Number.POSITIVE_INFINITY
+};
 
 // Helper functions for Firestore paths
 const getTeacherSoloResultsCollection = (teacherId) => collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
+const getTeacherQuizzesCollection = (teacherId, appId = finalAppId) => collection(db, 'artifacts', appId, 'users', teacherId, 'my_quizzes');
 const getSessionRefById = (id) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
 const getParticipantsCollection = (id) => collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id, 'participants');
 const getParticipantRef = (sessionId, participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', sessionId, 'participants', participantId);
 const getLegacyParticipantsCollection = () => collection(db, 'artifacts', finalAppId, 'public', 'data', 'participants');
 const getLegacyParticipantRef = (participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'participants', participantId);
 const getActiveParticipantRef = (sessionId, participantId) => participantStorageMode === 'legacy' ? getLegacyParticipantRef(participantId) : getParticipantRef(sessionId, participantId);
+const getSessionsCollection = () => collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions');
 
 window.tempLiveSelection = null;
 
@@ -74,6 +86,53 @@ const safeSetHTML = (id, html) => {
     if (el) el.innerHTML = html;
 };
 
+const resolveAccessLevel = (profile = {}, uid = null) => {
+    if (uid && uid === ADMIN_UID) return 'admin';
+    const level = String(profile?.accessLevel || '').toLowerCase();
+    if (level === 'admin' || level === 'teacher' || level === 'tester') return level;
+    const role = String(profile?.role || '').toLowerCase();
+    if (role === 'admin') return 'admin';
+    if (role === 'teacher') return 'teacher';
+    return 'tester';
+};
+
+const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.tester;
+
+const canCreateMoreLessons = () => {
+    const limit = getLessonLimit();
+    if (!Number.isFinite(limit)) return true;
+    return myQuizzes.length < limit;
+};
+
+const updateAccessUI = () => {
+    const titleEl = document.getElementById('teacher-plan-badge');
+    const detailsEl = document.getElementById('teacher-plan-details');
+    const createBtn = document.getElementById('create-lesson-btn');
+    const shareNote = document.getElementById('share-code-note');
+    const limit = getLessonLimit();
+    const levelLabels = { tester: 'Тестер', teacher: 'Учител', admin: 'Администратор' };
+
+    if (titleEl) {
+        titleEl.innerText = `Права: ${levelLabels[currentAccessLevel] || 'Тестер'}`;
+    }
+    if (detailsEl) {
+        detailsEl.innerText = Number.isFinite(limit)
+            ? `Лимит уроци: ${myQuizzes.length}/${limit}. Сесии в клас и дълъг код: разрешени.`
+            : 'Лимит уроци: неограничен. Пълни и неограничени права.';
+    }
+    if (createBtn) {
+        const enabled = canCreateMoreLessons();
+        createBtn.disabled = !enabled;
+        createBtn.classList.toggle('opacity-50', !enabled);
+        createBtn.title = enabled
+            ? 'Създай нов урок'
+            : `Достигнат лимит от ${limit} урока за вашия план.`;
+    }
+    if (shareNote) {
+        shareNote.innerText = 'Генерира се дълъг код (Base64) за тест/импорт на урок.';
+    }
+};
+
 // --- AUTH LOGIC ---
 onAuthStateChanged(auth, async (u) => {
     const incomingUid = u?.uid || null;
@@ -83,10 +142,9 @@ onAuthStateChanged(auth, async (u) => {
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
         // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
-const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; // ⚠️ ЗАМЕНИ!
 const adminBtn = document.getElementById('admin-panel-btn');
 if (adminBtn) {
-  if (user && user.uid === ADMIN_UID) {
+  if (incomingUid === ADMIN_UID) {
     adminBtn.classList.remove('hidden');
   } else {
     adminBtn.classList.add('hidden');
@@ -106,10 +164,14 @@ if (adminBtn) {
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
         try {
             const profileSnap = await getDoc(profileRef);
-            if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
-                isTeacher = true;
+            const profileData = profileSnap.exists() ? profileSnap.data() : {};
+            currentAccessLevel = resolveAccessLevel(profileData, incomingUid);
+            isTeacher = currentAccessLevel === 'teacher' || currentAccessLevel === 'admin' || currentAccessLevel === 'tester';
+
+            if (isTeacher) {
                 window.loadMyQuizzes();
                 window.loadSoloResults();
+                updateAccessUI();
                 if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
                     window.switchScreen('teacher-dashboard');
                 }
@@ -121,6 +183,8 @@ if (adminBtn) {
             if (e.code === 'permission-denied') window.showRulesHelpModal();
         }
     } else {
+        currentAccessLevel = 'tester';
+        updateAccessUI();
         window.switchScreen('welcome');
     }
 });
@@ -147,6 +211,14 @@ setTimeout(() => {
 }, 4000);
 
 initAuth();
+
+setTimeout(() => {
+    const anyVisible = Array.from(document.querySelectorAll('#app > div')).some(div => !div.classList.contains('hidden'));
+    if (!anyVisible) {
+        console.warn('No visible screen detected. Recovering to welcome screen.');
+        window.switchScreen('welcome');
+    }
+}, 1200);
 
 // --- HELPER FUNCTIONS ---
 window.resolveTeacherUidFromCode = async (decoded) => {
@@ -189,10 +261,60 @@ window.resolveTeacherUidFromCode = async (decoded) => {
 };
 
 
+
+const normalizeQuizPayload = (rawQuiz) => {
+    if (!rawQuiz || typeof rawQuiz !== 'object') return null;
+    const videoId = rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
+    const questionList = Array.isArray(rawQuiz.q)
+        ? rawQuiz.q
+        : (Array.isArray(rawQuiz.questions) ? rawQuiz.questions : []);
+
+    if (!videoId || questionList.length === 0) return null;
+
+    return {
+        ...rawQuiz,
+        v: videoId,
+        q: questionList,
+        questions: questionList,
+        title: rawQuiz.title || rawQuiz.name || 'Без име'
+    };
+
+};
+
+const normalizeStoredQuiz = (rawQuiz) => {
+    if (!rawQuiz || typeof rawQuiz !== 'object') return null;
+    const normalized = normalizeQuizPayload(rawQuiz);
+    const videoId = normalized?.v || rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
+    const questionList = normalized?.q
+        || (Array.isArray(rawQuiz.questions) ? rawQuiz.questions : (Array.isArray(rawQuiz.q) ? rawQuiz.q : []));
+
+    return {
+        ...rawQuiz,
+        id: rawQuiz.id,
+        title: normalized?.title || rawQuiz.title || rawQuiz.name || 'Без име',
+        v: videoId,
+        questions: questionList,
+        q: questionList
+    };
+};
+
 window.switchScreen = (name) => {
+
+    if (name === 'create' && !editingQuizId && !canCreateMoreLessons()) {
+        const limit = getLessonLimit();
+        window.showMessage(`Достигнахте лимита от ${limit} урока за вашите права.`, 'error');
+        name = 'teacher-dashboard';
+    }
+
     document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
     const target = document.getElementById('screen-' + name);
-    if (target) target.classList.remove('hidden');
+    if (target) {
+        target.classList.remove('hidden');
+    } else {
+        const fallback = document.getElementById('screen-welcome');
+        fallback?.classList.remove('hidden');
+        console.warn(`Unknown screen: ${name}. Falling back to welcome.`);
+    }
 
     if (player) { try { player.destroy(); } catch(e) {} player = null; }
     if (solvePlayer) { try { solvePlayer.destroy(); } catch(e) {} solvePlayer = null; }
@@ -207,6 +329,7 @@ window.switchScreen = (name) => {
     if (name === 'teacher-dashboard' && user) {
         window.loadMyQuizzes();
         window.loadSoloResults();
+        updateAccessUI();
     }
     if (window.lucide) lucide.createIcons();
     window.scrollTo(0, 0);
@@ -277,12 +400,18 @@ window.handleAuthSubmit = async () => {
     try {
         if (authMode === 'register') {
             const code = document.getElementById('auth-teacher-code').value.trim();
-            if (code !== MASTER_TEACHER_CODE) return window.showMessage("Грешен код за учител!", "error");
+            let registerAccessLevel = null;
+            if (code === MASTER_TEACHER_CODE) registerAccessLevel = 'teacher';
+            if (code === MASTER_TESTER_CODE) registerAccessLevel = 'tester';
+            if (!registerAccessLevel) {
+                return window.showMessage("Грешен код за достъп!", "error");
+            }
 
             try {
                 const cred = await createUserWithEmailAndPassword(auth, email, pass);
                 await setDoc(doc(db, 'artifacts', finalAppId, 'users', cred.user.uid, 'settings', 'profile'), {
                     role: 'teacher',
+                    accessLevel: registerAccessLevel,
                     email: email,
                     emailNormalized: email.toLowerCase(),
                     activatedAt: serverTimestamp()
@@ -299,6 +428,7 @@ window.handleAuthSubmit = async () => {
                     }
                     await setDoc(doc(db, 'artifacts', finalAppId, 'users', anonUser.uid, 'settings', 'profile'), {
                         role: 'teacher',
+                        accessLevel: 'tester',
                         email: email + " (Guest)",
                         emailNormalized: email.toLowerCase(),
                         activatedAt: serverTimestamp(),
@@ -372,9 +502,13 @@ window.submitImport = () => {
 
 window.saveImportedQuiz = async (data) => {
     if (!user) return;
+    if (!canCreateMoreLessons()) {
+        const limit = getLessonLimit();
+        return window.showMessage(`Достигнахте лимита от ${limit} урока за вашите права.`, 'error');
+    }
     window.showMessage("Импортиране...");
     try {
-        await addDoc(collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes'), {
+        await addDoc(getTeacherQuizzesCollection(user.uid), {
             title: data.title + " (Импортиран)", v: data.v, questions: data.q, createdAt: serverTimestamp()
         });
         window.showMessage("Урокът е добавен!", "info");
@@ -386,16 +520,63 @@ window.saveImportedQuiz = async (data) => {
 
 // --- FIREBASE DATA OPS ---
 window.loadMyQuizzes = async () => {
-    if (!user) return;
-    const q = collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes');
-    const unsub = onSnapshot(q, (snap) => {
-        myQuizzes = snap.docs.map(d => ({...d.data(), id: d.id}));
+    if (!user) { updateAccessUI(); return; }
+
+    const normalizeStoredQuizSafe = typeof normalizeStoredQuiz === 'function'
+        ? normalizeStoredQuiz
+        : (rawQuiz) => {
+            if (!rawQuiz || typeof rawQuiz !== 'object') return null;
+            const videoId = rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
+            const questionList = Array.isArray(rawQuiz.questions)
+                ? rawQuiz.questions
+                : (Array.isArray(rawQuiz.q) ? rawQuiz.q : []);
+            return {
+                ...rawQuiz,
+                id: rawQuiz.id,
+                title: rawQuiz.title || rawQuiz.name || 'Без име',
+                v: videoId,
+                questions: questionList,
+                q: questionList
+            };
+        };
+
+    const snapshotsBySource = new Map();
+    const rebuildAndRender = () => {
+        const mergedByKey = new Map();
+        snapshotsBySource.forEach((docs, sourceAppId) => {
+            docs.forEach((quizDoc) => {
+                const normalized = normalizeStoredQuizSafe(quizDoc);
+                if (!normalized?.id) return;
+                mergedByKey.set(`${sourceAppId}:${normalized.id}`, normalized);
+            });
+        });
+        myQuizzes = Array.from(mergedByKey.values());
         renderMyQuizzes();
-    }, (error) => {
-        console.error("My quizzes error:", error);
-        if (error.code === 'permission-denied') window.showRulesHelpModal();
-    });
-    unsubscribes.push(unsub);
+        updateAccessUI();
+    };
+
+    const attachListener = (appId) => {
+        const q = getTeacherQuizzesCollection(user.uid, appId);
+        const unsub = onSnapshot(q, (snap) => {
+            snapshotsBySource.set(appId, snap.docs.map((d) => ({ ...d.data(), id: d.id })));
+            rebuildAndRender();
+        }, (error) => {
+            console.error(`My quizzes error (${appId}):`, error);
+            if (error.code === 'permission-denied') {
+                if (appId === legacyAppId) {
+                    console.warn('Legacy app scope is not readable with current Firestore rules. Continuing with current scope only.');
+                    return;
+                }
+                window.showRulesHelpModal();
+            }
+        });
+        unsubscribes.push(unsub);
+    };
+
+    attachListener(finalAppId);
+    if (legacyAppId !== finalAppId) {
+        attachListener(legacyAppId);
+    }
 };
 
 window.loadSoloResults = async () => {
@@ -473,7 +654,7 @@ function renderSoloResults() {
         <tr class="border-b text-[10px] sm:text-xs hover:bg-slate-50">
             <td class="py-3 px-4 font-black text-slate-700">${r.studentName}</td>
             <td class="py-3 px-4 text-slate-500 truncate max-w-[120px]">${r.quizTitle}</td>
-            <td class="py-3 px-4 text-slate-400 font-mono">${window.formatDate(r.timestamp)}</td>
+            <td class="py-3 px-4 text-slate-400 font-mono">${formatDate(r.timestamp)}</td>
             <td class="py-3 px-4 text-right"><span class="bg-indigo-100 text-indigo-600 px-2 py-1 rounded-lg font-black">${r.score}</span></td>
             <td class="py-3 px-4 text-center">
                 <button onclick="window.deleteSoloResult('${r.id}')" class="text-rose-400 hover:text-rose-600 p-2 rounded-lg hover:bg-rose-50 transition-all" title="Изтрий резултат">
@@ -489,6 +670,9 @@ function renderSoloResults() {
 window.startHostFromLibrary = async (id) => {
     const quiz = myQuizzes.find(q => q.id === id);
     if (!quiz) return window.showMessage("Грешка при зареждане на урока.", "error");
+    if (!quiz.v || !Array.isArray(quiz.questions) || quiz.questions.length === 0) {
+        return window.showMessage("Този урок е в стар/непълен формат. Отворете Редакция и запазете отново.", "error");
+    }
     currentQuiz = { v: quiz.v, q: quiz.questions, title: quiz.title };
     currentQuizOwnerId = user?.uid || null;
     await window.openLiveHost();
@@ -575,7 +759,7 @@ window.initHostPlayer = () => {
     document.getElementById('host-video-container').innerHTML = '<div id="host-video"></div>';
     hostPlayer = new YT.Player('host-video', {
         videoId: currentQuiz.v,
-        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1 },
+        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1, 'origin': window.location.origin },
         events: {
             'onReady': (event) => event.target.playVideo(),
             'onStateChange': async (e) => {
@@ -583,7 +767,7 @@ window.initHostPlayer = () => {
                     const i = setInterval(async () => {
                         if (!hostPlayer?.getCurrentTime) return;
                         const cur = Math.floor(hostPlayer.getCurrentTime());
-                        document.getElementById('host-timer').innerText = window.formatTime(cur);
+                        document.getElementById('host-timer').innerText = formatTime(cur);
                         const qIdx = currentQuiz.q.findIndex(q => Math.abs(q.time - cur) <= 1);
                         if (qIdx !== -1 && qIdx !== liveActiveQIdx) {
                             liveActiveQIdx = qIdx;
@@ -834,7 +1018,7 @@ function getSoloResultsExportModel() {
             idx: idx + 1,
             studentName: r.studentName || '-',
             quizTitle: r.quizTitle || '-',
-            dateTime: window.formatDate(r.timestamp),
+            dateTime: formatDate(r.timestamp),
             scoreLabel: r.score || '-',
             score: parsed.score,
             total: parsed.total,
@@ -1410,7 +1594,9 @@ window.startIndividual = async () => {
     sopModeEnabled = !!document.getElementById('ind-sop-mode')?.checked;
     const name = isDiscussionMode ? "Обсъждане" : prompt("Вашето име:");
     if (!name) return;
-    studentNameValue = name; currentQuiz = decoded;
+    const normalizedQuiz = normalizeQuizPayload(decoded);
+    if (!normalizedQuiz) return window.showMessage("Кодът е невалиден или непълен (липсва видео/въпроси).", 'error');
+    studentNameValue = name; currentQuiz = normalizedQuiz;
     currentQuizOwnerId = await window.resolveTeacherUidFromCode(decoded);
     if (!currentQuizOwnerId) {
         return window.showMessage("Кодът не е свързан еднозначно с учител. Генерирайте нов код от профила на учителя.", 'error');
@@ -1436,7 +1622,7 @@ window.initSolvePlayer = () => {
     document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
     solvePlayer = new YT.Player('solve-player', {
         videoId: currentQuiz.v, width: '100%', height: '100%',
-        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1 },
+        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1, 'origin': window.location.origin },
         events: { 'onStateChange': (e) => {
             if (e.data === YT.PlayerState.ENDED) {
                 window.finishSoloGame();
@@ -1693,10 +1879,44 @@ window.finishSoloGame = async () => {
 };
 
 // --- EDITOR ENGINE ---
+const extractYouTubeVideoId = (input) => {
+    if (!input) return null;
+    const value = String(input).trim();
+
+    const directIdMatch = value.match(/^[a-zA-Z0-9_-]{11}$/);
+    if (directIdMatch) return directIdMatch[0];
+
+    try {
+        const parsed = new URL(value);
+        const host = parsed.hostname.replace(/^www\./, '');
+
+        if (host === 'youtu.be') {
+            const id = parsed.pathname.split('/').filter(Boolean)[0];
+            if (id && /^[a-zA-Z0-9_-]{11}$/.test(id)) return id;
+        }
+
+        if (host.endsWith('youtube.com')) {
+            const fromQuery = parsed.searchParams.get('v');
+            if (fromQuery && /^[a-zA-Z0-9_-]{11}$/.test(fromQuery)) return fromQuery;
+
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            const key = parts[0];
+            const candidate = parts[1];
+            if (["embed", "v", "shorts", "live"].includes(key) && candidate && /^[a-zA-Z0-9_-]{11}$/.test(candidate)) {
+                return candidate;
+            }
+        }
+    } catch (_) {
+        // not a full URL -> fallback regex below
+    }
+
+    return value.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/shorts\/|\/live\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1] || null;
+};
+
 window.loadEditorVideo = (isEdit = false) => {
     const url = document.getElementById('yt-url')?.value;
-    const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
-    if (!id) return window.showMessage("Невалиден линк.", "error");
+    const id = extractYouTubeVideoId(url);
+    if (!id) return window.showMessage("Невалиден YouTube линк или ID.", "error");
 
     if (!window.YT || !window.YT.Player) {
         window.showMessage("Изчакайте YouTube API...", "error");
@@ -1707,8 +1927,8 @@ window.loadEditorVideo = (isEdit = false) => {
     currentVideoId = id;
     document.getElementById('editor-view').classList.remove('hidden');
     document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
-    player = new YT.Player('player', { videoId: id, events: { 'onReady': () => {
-        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
+    player = new YT.Player('player', { videoId: id, playerVars: { 'origin': window.location.origin, 'playsinline': 1, 'rel': 0 }, events: { 'onReady': () => {
+        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = formatTime(player.getCurrentTime()); }, 500);
         activeIntervals.push(i);
     }}});
     if (!isEdit) { questions = []; editingQuizId = null; }
@@ -1722,7 +1942,7 @@ window.openQuestionModal = () => {
     document.getElementById('m-text').value = '';
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
-    document.getElementById('m-time').innerText = window.formatTime(player.getCurrentTime());
+    document.getElementById('m-time').innerText = formatTime(player.getCurrentTime());
     window.updateModalFields();
 };
 
@@ -1853,7 +2073,7 @@ window.editQuestionContent = (index) => {
     document.getElementById('m-text').value = q.text;
     document.getElementById('m-type').value = q.type;
     document.getElementById('m-points').value = q.points || 1;
-    document.getElementById('m-time').innerText = window.formatTime(q.time);
+    document.getElementById('m-time').innerText = formatTime(q.time);
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
     window.updateModalFields();
@@ -1894,7 +2114,7 @@ function renderEditorList() {
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-1">
                     <button onclick="window.adjustTime(${i}, -1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">-</button>
-                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${window.formatTime(q.time)}</span>
+                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${formatTime(q.time)}</span>
                     <button onclick="window.adjustTime(${i}, 1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">+</button>
                 </div>
                 <div class="flex gap-1">
@@ -1929,6 +2149,10 @@ window.deleteEditorQuestion = (i) => { if (confirm("Изтриване на въ
 
 window.saveQuizToLibrary = async () => {
     if (!user) return;
+    if (!editingQuizId && !canCreateMoreLessons()) {
+        const limit = getLessonLimit();
+        return window.showMessage(`Достигнахте лимита от ${limit} урока за вашите права.`, 'error');
+    }
     let title = "";
     const existing = editingQuizId ? myQuizzes.find(x => x.id === editingQuizId) : null;
     title = prompt("Име на урока:", existing?.title || "");
@@ -1938,8 +2162,8 @@ window.saveQuizToLibrary = async () => {
     try {
         const data = { title, v: currentVideoId, questions, updatedAt: serverTimestamp() };
         if (!editingQuizId) data.createdAt = serverTimestamp();
-        if (editingQuizId) await updateDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', editingQuizId), data);
-        else await addDoc(collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes'), data);
+        if (editingQuizId) await updateDoc(doc(getTeacherQuizzesCollection(user.uid), editingQuizId), data);
+        else await addDoc(getTeacherQuizzesCollection(user.uid), data);
         window.showMessage("Урокът е запазен!", "info");
         editingQuizId = null;
         window.switchScreen('teacher-dashboard');
@@ -1974,17 +2198,18 @@ window.editQuiz = (id) => {
     const qData = myQuizzes.find(x => x.id === id);
     if (!qData) return;
     editingQuizId = id;
-    questions = JSON.parse(JSON.stringify(qData.questions || []));
-    currentVideoId = qData.v;
+    questions = JSON.parse(JSON.stringify(qData.questions || qData.q || []));
+    currentVideoId = qData.v || qData.videoId || qData.youtubeId || '';
     window.switchScreen('create');
-    document.getElementById('yt-url').value = `https://www.youtube.com/watch?v=${qData.v}`;
+    if (!currentVideoId) return window.showMessage("Липсва видео в този урок. Добавете YouTube линк и запазете отново.", "error");
+    document.getElementById('yt-url').value = `https://www.youtube.com/watch?v=${currentVideoId}`;
     window.loadEditorVideo(true);
 };
 
 window.deleteQuiz = async (id) => {
     if (!user) return;
     if (confirm("Изтриване на урока?")) {
-        await deleteDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', id));
+        await deleteDoc(doc(getTeacherQuizzesCollection(user.uid), id));
         window.showMessage("Урокът е изтрит.", "info");
     }
 };
@@ -2004,28 +2229,129 @@ window.requestStorageAccess = async function() {
     }
 };
 // --- АДМИНИСТРАТОРСКИ ПАНЕЛ (само за admin) ---
+const isCurrentUserAdmin = () => !!user && user.uid === ADMIN_UID;
+
+const setAdminLoading = (isLoading) => {
+    const loadingEl = document.getElementById('admin-loading');
+    const contentEl = document.getElementById('admin-content');
+    if (!loadingEl || !contentEl) return;
+    if (isLoading) {
+        loadingEl.classList.remove('hidden');
+        contentEl.classList.add('hidden');
+    } else {
+        loadingEl.classList.add('hidden');
+        contentEl.classList.remove('hidden');
+    }
+};
+
+const renderAdminStats = (rows = []) => {
+    const totals = rows.reduce((acc, row) => {
+        acc.lessons += row.lessons;
+        acc.live += row.liveSessions;
+        acc.solo += row.soloSessions;
+        return acc;
+    }, { lessons: 0, live: 0, solo: 0 });
+
+    safeSetText('admin-total-teachers', String(rows.length));
+    safeSetText('admin-total-lessons', String(totals.lessons));
+    safeSetText('admin-total-live-sessions', String(totals.live));
+    safeSetText('admin-total-solo-sessions', String(totals.solo));
+
+    const body = document.getElementById('admin-teachers-body');
+    if (!body) return;
+    body.innerHTML = rows.map((row, idx) => `
+        <tr class="border-b text-xs hover:bg-slate-50">
+            <td class="py-3 px-3 font-black text-slate-500">${idx + 1}</td>
+            <td class="py-3 px-3">
+                <p class="font-bold text-slate-800">${row.name}</p>
+                <p class="text-[10px] text-slate-400">${row.email}</p>
+                <p class="text-[9px] text-slate-300 font-mono mt-1">${row.uid}</p>
+            </td>
+            <td class="py-3 px-3 text-center font-black text-indigo-600">${row.lessons}</td>
+            <td class="py-3 px-3 text-center font-black text-emerald-600">${row.liveSessions}</td>
+            <td class="py-3 px-3 text-center font-black text-amber-600">${row.soloSessions}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="5" class="py-8 text-center text-slate-300 italic">Няма намерени учители.</td></tr>';
+};
+
+window.loadAdminDashboard = async function() {
+    if (!isCurrentUserAdmin()) {
+        window.showMessage('Нямате достъп до админ панела.', 'error');
+        window.switchScreen('teacher-dashboard');
+        return;
+    }
+
+    setAdminLoading(true);
+    try {
+        const teachersQ = query(collectionGroup(db, 'profile'), where('role', '==', 'teacher'));
+        const teachersSnap = await getDocs(teachersQ);
+
+        const teacherRows = await Promise.all(teachersSnap.docs.map(async (teacherDoc) => {
+            const teacherUid = teacherDoc.ref.parent.parent?.id || null;
+            const teacherData = teacherDoc.data() || {};
+            if (!teacherUid) {
+                return null;
+            }
+
+            const [quizzesSnap, legacyQuizzesSnap, soloSnap, liveSnap] = await Promise.all([
+                getDocs(getTeacherQuizzesCollection(teacherUid, finalAppId)),
+                getDocs(getTeacherQuizzesCollection(teacherUid, legacyAppId)),
+                getDocs(getTeacherSoloResultsCollection(teacherUid)),
+                getDocs(query(getSessionsCollection(), where('hostId', '==', teacherUid)))
+            ]);
+
+            const uniqueQuizIds = new Set([
+                ...quizzesSnap.docs.map((docSnap) => `${finalAppId}:${docSnap.id}`),
+                ...legacyQuizzesSnap.docs.map((docSnap) => `${legacyAppId}:${docSnap.id}`)
+            ]);
+
+            return {
+                uid: teacherUid,
+                name: teacherData.name || teacherData.displayName || teacherData.fullName || 'Учител',
+                email: teacherData.email || 'без имейл',
+                lessons: uniqueQuizIds.size,
+                liveSessions: liveSnap.size,
+                soloSessions: soloSnap.size
+            };
+        }));
+
+        const filteredRows = teacherRows
+            .filter(Boolean)
+            .sort((a, b) => (b.lessons + b.liveSessions + b.soloSessions) - (a.lessons + a.liveSessions + a.soloSessions));
+
+        renderAdminStats(filteredRows);
+    } catch (error) {
+        const isPermissionError = error?.code === 'permission-denied';
+        if (isPermissionError) {
+            console.warn('Admin dashboard blocked by Firestore rules:', error);
+            window.showRulesHelpModal();
+        } else {
+            console.error('Admin dashboard error:', error);
+        }
+
+        const body = document.getElementById('admin-teachers-body');
+        if (body) {
+            body.innerHTML = isPermissionError
+                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп по Firestore rules. Публикувайте правилата от помощния модал.</td></tr>'
+                : '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
+        }
+        window.showMessage(
+            isPermissionError
+                ? '❌ Липсват Firestore права за админ панела. Отворен е Rules модал с точния код.'
+                : '❌ Неуспешно зареждане на админ данни.',
+            'error'
+        );
+    } finally {
+        setAdminLoading(false);
+    }
+};
+
 window.openAdminPanel = async function() {
-  try {
-    window.showMessage("📊 Зареждам статистики...", "info");
-    
-    const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
-    const result = await getAdminStatsFunc();
-    const stats = result.data;
-    
-    const message = `📊 АДМИН СТАТИСТИКИ:
-━━━━━━━━━━━━━━━━━━━━━
-👥 Учители: ${stats.totalTeachers}
-📚 Уроци: ${stats.totalQuizzes}
-📝 Соло резултати: ${stats.totalSoloResults}
-🎬 Сесии на живо: ${stats.totalSessions}
-👩‍🎓 Участници (общо): ${stats.totalParticipants}
-━━━━━━━━━━━━━━━━━━━━━`;
-    
-    window.showMessage(message, "info", 15000); // показва се 15 секунди
-  } catch (error) {
-    console.error("Admin panel error:", error);
-    window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
-  }
+    if (!isCurrentUserAdmin()) {
+        return window.showMessage('Нямате права за админ панела.', 'error');
+    }
+    window.switchScreen('admin');
+    await window.loadAdminDashboard();
 };
 // --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
