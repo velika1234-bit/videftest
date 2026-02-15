@@ -51,11 +51,12 @@ let participantStorageMode = 'legacy';
 let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
-let currentAccessLevel = 'tester';
+let currentAccessLevel = 'guest';
 const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
 const MASTER_TEACHER_CODE = "vilidaf76";
 const MASTER_TESTER_CODE = "tester3";
 const ACCESS_LIMITS = {
+    guest: 0,
     tester: 3,
     teacher: 20,
     admin: Number.POSITIVE_INFINITY
@@ -98,7 +99,7 @@ const resolveAccessLevel = (profile = {}, uid = null) => {
     return null;
 };
 
-const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.tester;
+const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.guest;
 
 const canCreateMoreLessons = () => {
     const limit = getLessonLimit();
@@ -112,10 +113,10 @@ const updateAccessUI = () => {
     const createBtn = document.getElementById('create-lesson-btn');
     const shareNote = document.getElementById('share-code-note');
     const limit = getLessonLimit();
-    const levelLabels = { tester: 'Тестер', teacher: 'Учител', admin: 'Администратор' };
+    const levelLabels = { guest: 'Без достъп', tester: 'Тестер', teacher: 'Учител', admin: 'Администратор' };
 
     if (titleEl) {
-        titleEl.innerText = `Права: ${levelLabels[currentAccessLevel] || 'Тестер'}`;
+        titleEl.innerText = `Права: ${levelLabels[currentAccessLevel] || 'Без достъп'}`;
     }
     if (detailsEl) {
         detailsEl.innerText = Number.isFinite(limit)
@@ -185,7 +186,7 @@ if (adminBtn) {
             if (e.code === 'permission-denied') window.showRulesHelpModal();
         }
     } else {
-        currentAccessLevel = 'tester';
+        currentAccessLevel = 'guest';
         updateAccessUI();
         window.switchScreen('welcome');
     }
@@ -2325,7 +2326,7 @@ window.loadAdminDashboard = async function() {
     } catch (error) {
         const isPermissionError = error?.code === 'permission-denied';
         if (isPermissionError) {
-            console.warn('Admin dashboard blocked by Firestore rules:', error);
+            console.warn('Admin dashboard blocked by Firestore rules or non-admin account:', error);
             window.showRulesHelpModal();
         } else {
             console.error('Admin dashboard error:', error);
@@ -2334,12 +2335,12 @@ window.loadAdminDashboard = async function() {
         const body = document.getElementById('admin-teachers-body');
         if (body) {
             body.innerHTML = isPermissionError
-                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп по Firestore rules. Публикувайте правилата от помощния модал.</td></tr>'
+                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп. Публикувайте правилата и влезте с admin UID.</td></tr>'
                 : '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
         }
         window.showMessage(
             isPermissionError
-                ? '❌ Липсват Firestore права за админ панела. Отворен е Rules модал с точния код.'
+                ? '❌ Няма админ достъп: публикувайте правилата и влезте с admin UID. Отворен е Rules модал.'
                 : '❌ Неуспешно зареждане на админ данни.',
             'error'
         );
