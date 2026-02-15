@@ -1,29 +1,9 @@
-// ============================================
-// VideoQuiz Ultimate - ОСНОВЕН МОДУЛ
-// Версия: Стабилна + разбъркване на отговорите
-// ============================================
-
-// ----------------------------------------------------------------------
-// 1. ИМПОРТИ
-// ----------------------------------------------------------------------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { 
-    getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
-    serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, 
-    limit, getDocs, collectionGroup 
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { 
-    getAuth, signInAnonymously, onAuthStateChanged, signOut, 
-    setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, signInWithCustomToken 
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFunctions } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
-import { 
-    formatTime, formatDate, parseScoreValue, decodeQuizCode, 
-    AVATARS, getTimestampMs, shuffleArray 
-} from './utils.js';
-
-// --- Firebase конфигурация ---
+import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+// --- Импортиране на helper функции от utils.js ---
+import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
+// --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
     authDomain: "videoquiz-ultimate.firebaseapp.com",
@@ -38,11 +18,8 @@ const finalAppId = 'videoquiz-ultimate-live';
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const functions = getFunctions(app, 'us-central1');
 
-// ----------------------------------------------------------------------
-// 2. ГЛОБАЛНИ ПРОМЕНЛИВИ (STATE)
-// ----------------------------------------------------------------------
+// --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
 let isTeacher = false;
@@ -73,11 +50,19 @@ let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
 
+// Helper functions for Firestore paths
+const getTeacherSoloResultsCollection = (teacherId) => collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
+const getSessionRefById = (id) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
+const getParticipantsCollection = (id) => collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id, 'participants');
+const getParticipantRef = (sessionId, participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', sessionId, 'participants', participantId);
+const getLegacyParticipantsCollection = () => collection(db, 'artifacts', finalAppId, 'public', 'data', 'participants');
+const getLegacyParticipantRef = (participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'participants', participantId);
+const getActiveParticipantRef = (sessionId, participantId) => participantStorageMode === 'legacy' ? getLegacyParticipantRef(participantId) : getParticipantRef(sessionId, participantId);
+
 window.tempLiveSelection = null;
 
-// ----------------------------------------------------------------------
-// 3. ПОМОЩНИ ФУНКЦИИ (НЕ-ЕКСПОРТИРАНИ)
-// ----------------------------------------------------------------------
+
+// --- SAFE DOM HELPERS ---
 const safeSetText = (id, text) => {
     const el = document.getElementById(id);
     if (el) el.innerText = text;
@@ -88,118 +73,7 @@ const safeSetHTML = (id, html) => {
     if (el) el.innerHTML = html;
 };
 
-window.decodeQuizCode = decodeQuizCode; // вече от utils.js
-window.formatTime = formatTime;
-window.formatDate = formatDate;
-
-window.resolveTeacherUidFromCode = async (decoded) => {
-    if (!decoded) return null;
-    const explicitOwnerId = decoded.ownerId || decoded.teacherId || null;
-    if (explicitOwnerId) return explicitOwnerId;
-    const ownerEmail = (decoded.ownerEmailNormalized || decoded.ownerEmail || decoded.teacherEmail || '').trim().toLowerCase();
-    if (!ownerEmail) return null;
-    try {
-        const normalizedQ = query(
-            collectionGroup(db, 'profile'),
-            where('role', '==', 'teacher'),
-            where('emailNormalized', '==', ownerEmail)
-        );
-        const normalizedSnap = await getDocs(normalizedQ);
-        if (normalizedSnap.size === 1) {
-            return normalizedSnap.docs[0].ref.parent.parent?.id || null;
-        }
-        if (normalizedSnap.size > 1) {
-            console.error('Ambiguous teacher match by emailNormalized:', ownerEmail);
-            return null;
-        }
-        const fallbackQ = query(
-            collectionGroup(db, 'profile'),
-            where('role', '==', 'teacher'),
-            where('email', '==', ownerEmail)
-        );
-        const fallbackSnap = await getDocs(fallbackQ);
-        if (fallbackSnap.size === 1) {
-            return fallbackSnap.docs[0].ref.parent.parent?.id || null;
-        }
-        if (fallbackSnap.size > 1) {
-            console.error('Ambiguous teacher match by email:', ownerEmail);
-            return null;
-        }
-    } catch (e) {
-        console.error('Owner email lookup failed:', e);
-    }
-    return null;
-};
-
-// --- Helper функции за Firestore пътища (без импорт, защото не са в utils) ---
-const getTeacherSoloResultsCollection = (teacherId) => 
-    collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
-const getSessionRefById = (id) => 
-    doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
-const getParticipantsCollection = (id) => 
-    collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id, 'participants');
-const getParticipantRef = (sessionId, participantId) => 
-    doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', sessionId, 'participants', participantId);
-const getLegacyParticipantsCollection = () => 
-    collection(db, 'artifacts', finalAppId, 'public', 'data', 'participants');
-const getLegacyParticipantRef = (participantId) => 
-    doc(db, 'artifacts', finalAppId, 'public', 'data', 'participants', participantId);
-const getActiveParticipantRef = (sessionId, participantId) => 
-    participantStorageMode === 'legacy' ? getLegacyParticipantRef(participantId) : getParticipantRef(sessionId, participantId);
-
-window.switchScreen = (name) => {
-    document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
-    const target = document.getElementById('screen-' + name);
-    if (target) target.classList.remove('hidden');
-
-    if (player) { try { player.destroy(); } catch(e) {} player = null; }
-    if (solvePlayer) { try { solvePlayer.destroy(); } catch(e) {} solvePlayer = null; }
-    if (hostPlayer) { try { hostPlayer.destroy(); } catch(e) {} hostPlayer = null; }
-
-    unsubscribes.forEach(unsub => unsub());
-    unsubscribes = [];
-    activeIntervals.forEach(i => clearInterval(i));
-    activeIntervals = [];
-    currentParticipantRef = null;
-
-    if (name === 'teacher-dashboard' && user) {
-        window.loadMyQuizzes();
-        window.loadSoloResults();
-    }
-    if (window.lucide) lucide.createIcons();
-    window.scrollTo(0, 0);
-};
-
-window.showMessage = (text, type = 'info') => {
-    const container = document.getElementById('msg-container');
-    if (!container) return;
-    const msg = document.createElement('div');
-    msg.className = `p-4 rounded-2xl shadow-2xl font-black text-white animate-pop mb-3 flex items-center gap-3 ${type === 'error' ? 'bg-rose-500' : 'bg-indigo-600'}`;
-    msg.innerHTML = `<i data-lucide="${type === 'error' ? 'alert-circle' : 'info'}" class="w-5 h-5"></i><span>${text}</span>`;
-    container.appendChild(msg);
-    if (window.lucide) lucide.createIcons();
-    setTimeout(() => {
-        msg.classList.add('opacity-0');
-        setTimeout(() => msg.remove(), 500);
-    }, 4000);
-};
-
-window.quitHostSession = () => {
-    if (confirm("Това ще прекъсне сесията и ще спре таймерите. Сигурни ли сте?")) {
-        window.switchScreen('teacher-dashboard');
-    }
-};
-
-window.showRulesHelpModal = () => {
-    if (rulesModalShown) return;
-    rulesModalShown = true;
-    document.getElementById('modal-rules-help').classList.remove('hidden');
-    document.getElementById('modal-rules-help').classList.add('flex');
-};
-
-// ----------------------------------------------------------------------
-// 4. AUTH ЛОГИКА
-// ----------------------------------------------------------------------
+// --- AUTH LOGIC ---
 onAuthStateChanged(auth, async (u) => {
     const incomingUid = u?.uid || null;
     if (lastAuthUid !== incomingUid) {
@@ -263,6 +137,99 @@ setTimeout(() => {
 
 initAuth();
 
+// --- HELPER FUNCTIONS ---
+window.resolveTeacherUidFromCode = async (decoded) => {
+    if (!decoded) return null;
+    const explicitOwnerId = decoded.ownerId || decoded.teacherId || null;
+    if (explicitOwnerId) return explicitOwnerId;
+    const ownerEmail = (decoded.ownerEmailNormalized || decoded.ownerEmail || decoded.teacherEmail || '').trim().toLowerCase();
+    if (!ownerEmail) return null;
+    try {
+        const normalizedQ = query(
+            collectionGroup(db, 'profile'),
+            where('role', '==', 'teacher'),
+            where('emailNormalized', '==', ownerEmail)
+        );
+        const normalizedSnap = await getDocs(normalizedQ);
+        if (normalizedSnap.size === 1) {
+            return normalizedSnap.docs[0].ref.parent.parent?.id || null;
+        }
+        if (normalizedSnap.size > 1) {
+            console.error('Ambiguous teacher match by emailNormalized:', ownerEmail);
+            return null;
+        }
+        const fallbackQ = query(
+            collectionGroup(db, 'profile'),
+            where('role', '==', 'teacher'),
+            where('email', '==', ownerEmail)
+        );
+        const fallbackSnap = await getDocs(fallbackQ);
+        if (fallbackSnap.size === 1) {
+            return fallbackSnap.docs[0].ref.parent.parent?.id || null;
+        }
+        if (fallbackSnap.size > 1) {
+            console.error('Ambiguous teacher match by email:', ownerEmail);
+            return null;
+        }
+    } catch (e) {
+        console.error('Owner email lookup failed:', e);
+    }
+    return null;
+};
+
+
+window.switchScreen = (name) => {
+    document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
+    const target = document.getElementById('screen-' + name);
+    if (target) target.classList.remove('hidden');
+
+    if (player) { try { player.destroy(); } catch(e) {} player = null; }
+    if (solvePlayer) { try { solvePlayer.destroy(); } catch(e) {} solvePlayer = null; }
+    if (hostPlayer) { try { hostPlayer.destroy(); } catch(e) {} hostPlayer = null; }
+
+    unsubscribes.forEach(unsub => unsub());
+    unsubscribes = [];
+    activeIntervals.forEach(i => clearInterval(i));
+    activeIntervals = [];
+    currentParticipantRef = null;
+
+    if (name === 'teacher-dashboard' && user) {
+        window.loadMyQuizzes();
+        window.loadSoloResults();
+    }
+    if (window.lucide) lucide.createIcons();
+    window.scrollTo(0, 0);
+};
+
+window.showMessage = (text, type = 'info') => {
+    const container = document.getElementById('msg-container');
+    if (!container) return;
+    const msg = document.createElement('div');
+    msg.className = `p-4 rounded-2xl shadow-2xl font-black text-white animate-pop mb-3 flex items-center gap-3 ${type === 'error' ? 'bg-rose-500' : 'bg-indigo-600'}`;
+    msg.innerHTML = `<i data-lucide="${type === 'error' ? 'alert-circle' : 'info'}" class="w-5 h-5"></i><span>${text}</span>`;
+    container.appendChild(msg);
+    if (window.lucide) lucide.createIcons();
+    setTimeout(() => {
+        msg.classList.add('opacity-0');
+        setTimeout(() => msg.remove(), 500);
+    }, 4000);
+};
+
+window.quitHostSession = () => {
+    if (confirm("Това ще прекъсне сесията и ще спре таймерите. Сигурни ли сте?")) {
+        window.switchScreen('teacher-dashboard');
+    }
+};
+
+// --- PERMISSION ERROR HANDLER ---
+window.showRulesHelpModal = () => {
+    if (rulesModalShown) return;
+    rulesModalShown = true;
+    document.getElementById('modal-rules-help').classList.remove('hidden');
+    document.getElementById('modal-rules-help').classList.add('flex');
+};
+
+// --- AUTH HANDLERS ---
 window.toggleAuthMode = () => {
     authMode = authMode === 'login' ? 'register' : 'login';
     const title = document.getElementById('auth-title');
@@ -366,9 +333,7 @@ window.handleLogout = async () => {
     }, 1000);
 };
 
-// ----------------------------------------------------------------------
-// 5. IMPORT / EXPORT (импортиране на уроци)
-// ----------------------------------------------------------------------
+// --- IMPORT / EXPORT LOGIC ---
 window.openImportModal = () => {
     document.getElementById('import-code-input').value = "";
     document.getElementById('modal-import').classList.remove('hidden');
@@ -408,9 +373,7 @@ window.saveImportedQuiz = async (data) => {
     }
 };
 
-// ----------------------------------------------------------------------
-// 6. FIREBASE DATA OPS (моите уроци, резултати)
-// ----------------------------------------------------------------------
+// --- FIREBASE DATA OPS ---
 window.loadMyQuizzes = async () => {
     if (!user) return;
     const q = collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes');
@@ -511,9 +474,7 @@ function renderSoloResults() {
     if (window.lucide) lucide.createIcons();
 }
 
-// ----------------------------------------------------------------------
-// 7. LIVE HOST LOGIC (сесия на живо)
-// ----------------------------------------------------------------------
+// --- LIVE HOST LOGIC ---
 window.startHostFromLibrary = async (id) => {
     const quiz = myQuizzes.find(q => q.id === id);
     if (!quiz) return window.showMessage("Грешка при зареждане на урока.", "error");
@@ -746,9 +707,7 @@ window.finishLiveSession = async () => {
     }
 };
 
-// ----------------------------------------------------------------------
-// 8. EXCEL & PDF (без транслитерация, с кирилица)
-// ----------------------------------------------------------------------
+// --- EXCEL & PRINT LOGIC ---
 function getResultsData() {
     if (!currentQuiz || !lastFetchedParticipants) return [];
 
@@ -855,6 +814,85 @@ function getClassQuestionStats() {
     };
 }
 
+function getSoloResultsExportModel() {
+    const sortedResults = [...soloResults].sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp));
+    const attempts = sortedResults.map((r, idx) => {
+        const parsed = parseScoreValue(r.score);
+        const pct = parsed.total > 0 ? Math.round((parsed.score / parsed.total) * 100) : 0;
+        return {
+            idx: idx + 1,
+            studentName: r.studentName || '-',
+            quizTitle: r.quizTitle || '-',
+            dateTime: window.formatDate(r.timestamp),
+            scoreLabel: r.score || '-',
+            score: parsed.score,
+            total: parsed.total,
+            pct
+        };
+    });
+
+    const totalAttempts = attempts.length;
+    const totalScore = attempts.reduce((a, r) => a + r.score, 0);
+    const totalMax = attempts.reduce((a, r) => a + r.total, 0);
+    const avgPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
+
+    const byStudent = new Map();
+    attempts.forEach((r) => {
+        const prev = byStudent.get(r.studentName) || { attempts: 0, score: 0, total: 0 };
+        prev.attempts += 1;
+        prev.score += r.score;
+        prev.total += r.total;
+        byStudent.set(r.studentName, prev);
+    });
+
+    const studentSummary = Array.from(byStudent.entries()).map(([name, v]) => ({
+        name,
+        attempts: v.attempts,
+        scoreLabel: `${v.score}/${v.total}`,
+        pct: v.total > 0 ? Math.round((v.score / v.total) * 100) : 0
+    })).sort((a, b) => b.pct - a.pct || b.attempts - a.attempts);
+
+    return {
+        attempts,
+        studentSummary,
+        summary: { totalAttempts, totalScore, totalMax, avgPct }
+    };
+}
+
+window.exportSoloResultsExcel = () => {
+    const model = getSoloResultsExportModel();
+    if (model.attempts.length === 0) return window.showMessage("Няма индивидуални резултати за експорт.", "error");
+
+    const wb = XLSX.utils.book_new();
+
+    const summaryRows = [
+        ["ОБЩО ОПИТИ", model.summary.totalAttempts],
+        ["ОБЩ РЕЗУЛТАТ", `${model.summary.totalScore}/${model.summary.totalMax}`],
+        ["СРЕДЕН УСПЕХ", `${model.summary.avgPct}%`],
+        []
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Обобщение");
+
+    const attemptsRows = [
+        ["#", "Ученик", "Урок", "Дата/Час", "Точки", "% Успех"],
+        ...model.attempts.map(r => [r.idx, r.studentName, r.quizTitle, r.dateTime, r.scoreLabel, `${r.pct}%`])
+    ];
+    const wsAttempts = XLSX.utils.aoa_to_sheet(attemptsRows);
+    XLSX.utils.book_append_sheet(wb, wsAttempts, "Индивидуални_Опити");
+
+    const studentRows = [
+        ["Ученик", "Опити", "Точки", "% Успех"],
+        ...model.studentSummary.map(r => [r.name, r.attempts, r.scoreLabel, `${r.pct}%`])
+    ];
+    const wsStudents = XLSX.utils.aoa_to_sheet(studentRows);
+    XLSX.utils.book_append_sheet(wb, wsStudents, "По_Ученици");
+
+    const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
+    XLSX.writeFile(wb, `solo_results_${timestamp}.xlsx`);
+    window.showMessage("Индивидуалният отчет е изтеглен.");
+};
+
 window.exportExcel = () => {
     const data = getResultsData();
     if (data.length === 0) return window.showMessage("Няма данни за експорт.", "error");
@@ -957,12 +995,10 @@ window.exportPDF = () => {
 
     const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
     doc.save(`results_${sessionID}_${timestamp}.pdf`);
-    window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси)");
+    window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси).");
 };
 
-// ----------------------------------------------------------------------
-// 9. STUDENT CLIENT LOGIC (ученик в сесия на живо)
-// ----------------------------------------------------------------------
+// --- STUDENT CLIENT LOGIC ---
 window.joinLiveSession = async () => {
     const pin = document.getElementById('live-pin').value.trim();
     studentNameValue = document.getElementById('live-student-name').value.trim();
@@ -1082,10 +1118,9 @@ window.selectLiveOption = (el, val) => {
     stickyContainer.classList.remove('hidden');
 };
 
-// 🎲 ОБНОВЕНА: сравнява със shuffledCorrect
 window.submitLiveSingleConfirm = () => {
     if (window.tempLiveSelection === null) return;
-    const isCorrect = window.tempLiveSelection === window.currentLiveQ.shuffledCorrect;
+    const isCorrect = window.tempLiveSelection === window.currentLiveQ.correct;
     window.submitLiveFinal(isCorrect);
 };
 
@@ -1191,7 +1226,6 @@ window.submitLiveOrderingConfirm = () => {
     window.submitLiveFinal(isCorrect);
 };
 
-// 🎲 ОБНОВЕНА: добавяме разбъркване за single и boolean
 window.renderLiveQuestionUI = (q) => {
     const container = document.getElementById('live-options-client');
     container.innerHTML = '';
@@ -1205,19 +1239,10 @@ window.renderLiveQuestionUI = (q) => {
     </div>`;
 
     if (q.type === 'single') {
-        // 🔀 Разбъркване на опциите
-        const optionsWithIdx = q.options.map((text, idx) => ({ text, idx }));
-        const shuffled = shuffleArray(optionsWithIdx);
-        const shuffledOptions = shuffled.map(item => item.text);
-        const shuffledCorrectIndex = shuffled.findIndex(item => item.idx === q.correct);
-        
-        container.innerHTML = shuffledOptions.map((o, i) => `
+        container.innerHTML = q.options.map((o, i) => `
             <button onclick="window.selectLiveOption(this, ${i})" class="client-opt-btn w-full p-4 text-left bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 shadow-sm hover:border-indigo-300 transition-all text-sm mb-2">${o}</button>
         `).join('') + btnHtml;
-        
-        window.currentLiveQ.shuffledCorrect = shuffledCorrectIndex;
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveSingleConfirm;
-        
     } else if (q.type === 'multiple') {
         container.innerHTML = q.options.map((o, i) => `
             <label class="flex items-center gap-4 w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 cursor-pointer text-sm mb-2">
@@ -1225,28 +1250,17 @@ window.renderLiveQuestionUI = (q) => {
             </label>
         `).join('') + btnHtml;
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveMultipleConfirm;
-        
     } else if (q.type === 'boolean') {
-        // 🔀 Разбъркване на "ДА" и "НЕ"
-        const boolOptions = ['ДА', 'НЕ'];
-        const shuffledBool = shuffleArray([0, 1]); // 0 = ДА, 1 = НЕ
-        const shuffledOptions = shuffledBool.map(i => boolOptions[i]);
-        const shuffledCorrectIndex = shuffledBool.findIndex(i => i === (q.correct ? 0 : 1));
-        
         container.innerHTML = `
-            <div class="grid grid-cols-2 gap-4">
-                <button onclick="window.selectLiveOption(this, ${shuffledBool[0] === 0})" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-emerald-600 text-xl">${shuffledOptions[0]}</button>
-                <button onclick="window.selectLiveOption(this, ${shuffledBool[1] === 0})" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-rose-600 text-xl">${shuffledOptions[1]}</button>
-            </div>` + btnHtml;
-        
-        window.currentLiveQ.shuffledCorrect = shuffledCorrectIndex;
+         <div class="grid grid-cols-2 gap-4">
+            <button onclick="window.selectLiveOption(this, true)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-emerald-600 text-xl">ДА</button>
+            <button onclick="window.selectLiveOption(this, false)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-rose-600 text-xl">НЕ</button>
+         </div>` + btnHtml;
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveSingleConfirm;
-        
     } else if (q.type === 'open') {
         container.innerHTML = `<input type="text" id="c-open-answer" placeholder="Напишете отговор..." class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-base outline-none text-center mb-4">` + btnHtml;
         document.getElementById('sticky-btn-container').classList.remove('hidden');
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOpenConfirm;
-        
     } else if (q.type === 'ordering') {
         const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
         container.innerHTML = `
@@ -1255,7 +1269,6 @@ window.renderLiveQuestionUI = (q) => {
             <button type="button" onclick="window.clearLiveOrdering()" class="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] mb-2">Изчисти</button>
         ` + btnHtml;
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOrderingConfirm;
-        
     } else if (q.type === 'timeline') {
         const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
         container.innerHTML = `
@@ -1268,7 +1281,6 @@ window.renderLiveQuestionUI = (q) => {
         ` + btnHtml;
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveTimelineConfirm;
         if (window.lucide) lucide.createIcons();
-        
     } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
         const defaultValue = (q.min + q.max) / 2;
         const isTimeline = (q.type === 'timeline-slider');
@@ -1378,9 +1390,7 @@ const readQuestionWithSpeech = (text) => {
     }
 };
 
-// ----------------------------------------------------------------------
-// 10. SOLO LOGIC (индивидуален режим)
-// ----------------------------------------------------------------------
+// --- SOLO LOGIC ---
 window.startIndividual = async () => {
     const pinCode = document.getElementById('ind-quiz-code').value.trim();
     const decoded = window.decodeQuizCode(pinCode);
@@ -1414,15 +1424,8 @@ window.initSolvePlayer = () => {
     }
     document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
     solvePlayer = new YT.Player('solve-player', {
-        videoId: currentQuiz.v, 
-        width: '100%', 
-        height: '100%',
-        playerVars: { 
-            'autoplay': 1, 
-            'controls': 1, 
-            'rel': 0, 
-            'playsinline': 1
-        },
+        videoId: currentQuiz.v, width: '100%', height: '100%',
+        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1 },
         events: { 'onStateChange': (e) => {
             if (e.data === YT.PlayerState.ENDED) {
                 window.finishSoloGame();
@@ -1450,7 +1453,6 @@ window.initSolvePlayer = () => {
     });
 };
 
-// 🎲 ОБНОВЕНА: добавяме разбъркване за single и boolean в соло режим
 window.triggerSoloQuestion = (q) => {
     solvePlayer?.pauseVideo();
     const overlay = document.getElementById('ind-overlay');
@@ -1466,36 +1468,13 @@ window.triggerSoloQuestion = (q) => {
     container.innerHTML = '';
 
     if (q.type === 'single') {
-        // 🔀 Разбъркване на опциите
-        const optionsWithIdx = q.options.map((text, idx) => ({ text, idx }));
-        const shuffled = shuffleArray(optionsWithIdx);
-        const shuffledOptions = shuffled.map(item => item.text);
-        const shuffledCorrectIndex = shuffled.findIndex(item => item.idx === q.correct);
-        
-        container.innerHTML = shuffledOptions.map((o, i) => `
-            <button onclick="window.submitSolo(${i}, ${shuffledCorrectIndex})" class="w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white hover:bg-white/20 transition-all text-sm">${o}</button>
-        `).join('');
-        
+        container.innerHTML = q.options.map((o, i) => `<button onclick="window.submitSolo(${i})" class="w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white hover:bg-white/20 transition-all text-sm">${o}</button>`).join('');
     } else if (q.type === 'multiple') {
         container.innerHTML = q.options.map((o, i) => `<label class="flex items-center gap-4 w-full p-4 bg-white/10 border border-white/20 rounded-2xl font-black text-white cursor-pointer text-sm mb-2"><input type="checkbox" name="s-multiple" value="${i}" class="w-5 h-5"> ${o}</label>`).join('') + `<button onclick="window.submitSoloMultiple()" class="w-full mt-4 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>`;
-        
     } else if (q.type === 'boolean') {
-        // 🔀 Разбъркване на "ДА" и "НЕ"
-        const boolOptions = ['ДА', 'НЕ'];
-        const shuffledBool = shuffleArray([0, 1]);
-        const shuffledOptions = shuffledBool.map(i => boolOptions[i]);
-        const shuffledCorrectIndex = shuffledBool.findIndex(i => i === (q.correct ? 0 : 1));
-        
-        container.innerHTML = `
-            <div class="grid grid-cols-2 gap-4">
-                <button onclick="window.submitSolo(${shuffledBool[0] === 0}, ${shuffledCorrectIndex === 0})" class="p-10 bg-emerald-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">${shuffledOptions[0]}</button>
-                <button onclick="window.submitSolo(${shuffledBool[1] === 0}, ${shuffledCorrectIndex === 1})" class="p-10 bg-rose-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">${shuffledOptions[1]}</button>
-            </div>
-        `;
-        
+        container.innerHTML = `<div class="grid grid-cols-2 gap-4"><button onclick="window.submitSolo(true)" class="p-10 bg-emerald-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">ДА</button><button onclick="window.submitSolo(false)" class="p-10 bg-rose-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">НЕ</button></div>`;
     } else if (q.type === 'open') {
         container.innerHTML = `<input type="text" id="s-open-answer" placeholder="Отговор..." class="w-full p-6 bg-white/10 border border-white/20 rounded-2xl font-black text-white text-xl outline-none mb-4 text-center"><button onclick="window.submitSoloOpen()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>`;
-        
     } else if (q.type === 'ordering') {
         window.userOrderSequence = [];
         const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
@@ -1506,7 +1485,6 @@ window.triggerSoloQuestion = (q) => {
                 <button onclick="window.clearSoloOrdering()" class="py-3 bg-slate-600 rounded-xl font-black text-xs">Изчисти</button>
                 <button onclick="window.submitSoloOrdering()" class="py-3 bg-indigo-600 rounded-xl font-black text-xs">Изпрати</button>
             </div>`;
-            
     } else if (q.type === 'timeline') {
         window.userOrderSequence = [];
         const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
@@ -1521,7 +1499,6 @@ window.triggerSoloQuestion = (q) => {
                 <button onclick="window.submitSoloTimeline()" class="py-3 bg-amber-600 rounded-xl font-black text-xs">Изпрати</button>
             </div>`;
         if (window.lucide) lucide.createIcons();
-        
     } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
         const defaultValue = (q.min + q.max) / 2;
         const isTimeline = (q.type === 'timeline-slider');
@@ -1605,10 +1582,7 @@ window.submitSoloOpen = () => {
     window.submitSoloFinal(ans === currentQuiz.q[currentQIndex].correct);
 };
 
-// 🎲 ОБНОВЕНА: приема два параметъра
-window.submitSolo = (selectedIndex, correctIndex) => {
-    window.submitSoloFinal(selectedIndex === correctIndex);
-};
+window.submitSolo = (v) => window.submitSoloFinal(v === currentQuiz.q[currentQIndex].correct);
 
 window.submitSoloOrdering = () => {
     const q = currentQuiz.q[currentQIndex];
@@ -1707,9 +1681,7 @@ window.finishSoloGame = async () => {
     }
 };
 
-// ----------------------------------------------------------------------
-// 11. EDITOR ENGINE (създаване и редактиране на уроци)
-// ----------------------------------------------------------------------
+// --- EDITOR ENGINE ---
 window.loadEditorVideo = (isEdit = false) => {
     const url = document.getElementById('yt-url')?.value;
     const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
@@ -1724,16 +1696,10 @@ window.loadEditorVideo = (isEdit = false) => {
     currentVideoId = id;
     document.getElementById('editor-view').classList.remove('hidden');
     document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
-    player = new YT.Player('player', { 
-        videoId: id, 
-        playerVars: {},
-        events: { 
-            'onReady': () => {
-                const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
-                activeIntervals.push(i);
-            }
-        }
-    });
+    player = new YT.Player('player', { videoId: id, events: { 'onReady': () => {
+        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
+        activeIntervals.push(i);
+    }}});
     if (!isEdit) { questions = []; editingQuizId = null; }
     renderEditorList();
 };
@@ -2011,10 +1977,22 @@ window.deleteQuiz = async (id) => {
         window.showMessage("Урокът е изтрит.", "info");
     }
 };
-
-// ----------------------------------------------------------------------
-// 12. YT API
-// ----------------------------------------------------------------------
+// --- Разрешаване на достъп до хранилище (за блокирани ученици) ---
+window.requestStorageAccess = async function() {
+    try {
+        if (document.requestStorageAccess) {
+            await document.requestStorageAccess();
+            window.showMessage("✅ Достъпът е разрешен! Моля, презаредете страницата.", "success");
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            window.showMessage("ℹ️ Вашият браузър не поддържа тази функция. Моля, разрешете 'Достъп до хранилище' от адресната лента.", "info");
+        }
+    } catch (e) {
+        console.error(e);
+        window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
+    }
+};
+// --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
     console.log("YouTube API Ready");
