@@ -2308,6 +2308,10 @@ window.loadAdminDashboard = async function() {
         renderAdminStats(filteredRows);
     } catch (error) {
         const isPermissionError = error?.code === 'permission-denied';
+        const activeUid = auth.currentUser?.uid || user?.uid || null;
+        const isAdminUid = !!activeUid && activeUid === ADMIN_UID;
+        const hasAdminAccess = isCurrentUserAdmin();
+
         if (isPermissionError) {
             console.warn('Admin dashboard blocked by Firestore rules or non-admin account:', error);
             window.showRulesHelpModal();
