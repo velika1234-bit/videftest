@@ -1992,6 +1992,12 @@ window.requestStorageAccess = async function() {
         window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
     }
 };
+// Закачане на helper функциите към window
+window.formatTime = formatTime;
+window.formatDate = formatDate;
+window.parseScoreValue = parseScoreValue;
+window.decodeQuizCode = decodeQuizCode;
+window.shuffleArray = shuffleArray;
 // --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
