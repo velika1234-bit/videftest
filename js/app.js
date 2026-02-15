@@ -200,16 +200,6 @@ window.formatDate = (timestamp) => {
         hour: '2-digit', minute: '2-digit'
     });
 };
-
-const getTimestampMs = (value) => {
-    if (!value) return 0;
-    if (typeof value === 'number') return value;
-    if (typeof value?.toMillis === 'function') return value.toMillis();
-    if (typeof value?.toDate === 'function') return value.toDate().getTime();
-    const parsed = new Date(value).getTime();
-    return Number.isNaN(parsed) ? 0 : parsed;
-};
-
 const parseScoreValue = (scoreText) => {
     if (!scoreText) return { score: 0, total: 0 };
     const parts = String(scoreText).split('/').map(s => parseInt(s.trim(), 10));
