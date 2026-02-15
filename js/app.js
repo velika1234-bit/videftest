@@ -2111,37 +2111,9 @@ window.openAdminPanel = async function() {
 };
 // --- ЗАРЕЖДАНЕ НА СПИСЪК С УЧИТЕЛИ ---
 window.loadTeachersList = async function() {
-  console.log('👥 loadTeachersList called - СТАРТ');
-  
-  // Проверка на functions обекта
-  console.log('🔍 functions object:', functions);
-  console.log('🔍 httpsCallable съществува ли?', typeof httpsCallable);
-  
   try {
-    console.log('📡 Опит за създаване на callable функция...');
-    const getTeachersFunc = httpsCallable(functions, 'getTeachersList');
-    console.log('✅ callable функция създадена:', getTeachersFunc);
+    console.log('👥 loadTeachersList called');
     
-    console.log('📡 Извиквам getTeachersList...');
-    const result = await getTeachersFunc();
-    console.log('✅ Отговор от функцията:', result);
-    
-    const teachers = result.data;
-    console.log('👥 Брой учители:', teachers.length);
-    console.log('📋 Данни:', teachers);
-    
-    // Тук ще добавим и кода за визуализация, но първо да видим логовете
-    window.showMessage('Учителите са заредени! Виж конзолата.', 'info');
-    
-  } catch (error) {
-    console.error('❌ Грешка при зареждане на учители:');
-    console.error('❌ error object:', error);
-    console.error('❌ error code:', error.code);
-    console.error('❌ error message:', error.message);
-    console.error('❌ error details:', error.details);
-    window.showMessage('❌ Грешка: ' + error.message, 'error');
-  }
-};  
     const modal = document.getElementById('modal-teachers');
     const loading = document.getElementById('teachers-loading');
     const tableContainer = document.getElementById('teachers-table-container');
