@@ -1999,6 +1999,7 @@ window.parseScoreValue = parseScoreValue;
 window.decodeQuizCode = decodeQuizCode;
 window.shuffleArray = shuffleArray;
 // --- YT API ---
+window.formatDate = formatDate;
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
     console.log("YouTube API Ready");
