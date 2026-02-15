@@ -221,6 +221,7 @@ const normalizeQuizPayload = (rawQuiz) => {
 };
 
 window.switchScreen = (name) => {
+
     document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
     const target = document.getElementById('screen-' + name);
     if (target) {
@@ -426,7 +427,9 @@ window.loadMyQuizzes = async () => {
     if (!user) return;
     const q = collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes');
     const unsub = onSnapshot(q, (snap) => {
-        myQuizzes = snap.docs.map(d => ({...d.data(), id: d.id}));
+        myQuizzes = snap.docs
+            .map(d => normalizeStoredQuiz({ ...d.data(), id: d.id }))
+            .filter(q => !!q?.id);
         renderMyQuizzes();
     }, (error) => {
         console.error("My quizzes error:", error);
@@ -526,6 +529,9 @@ function renderSoloResults() {
 window.startHostFromLibrary = async (id) => {
     const quiz = myQuizzes.find(q => q.id === id);
     if (!quiz) return window.showMessage("Грешка при зареждане на урока.", "error");
+    if (!quiz.v || !Array.isArray(quiz.questions) || quiz.questions.length === 0) {
+        return window.showMessage("Този урок е в стар/непълен формат. Отворете Редакция и запазете отново.", "error");
+    }
     currentQuiz = { v: quiz.v, q: quiz.questions, title: quiz.title };
     currentQuizOwnerId = user?.uid || null;
     await window.openLiveHost();
@@ -2047,10 +2053,11 @@ window.editQuiz = (id) => {
     const qData = myQuizzes.find(x => x.id === id);
     if (!qData) return;
     editingQuizId = id;
-    questions = JSON.parse(JSON.stringify(qData.questions || []));
-    currentVideoId = qData.v;
+    questions = JSON.parse(JSON.stringify(qData.questions || qData.q || []));
+    currentVideoId = qData.v || qData.videoId || qData.youtubeId || '';
     window.switchScreen('create');
-    document.getElementById('yt-url').value = `https://www.youtube.com/watch?v=${qData.v}`;
+    if (!currentVideoId) return window.showMessage("Липсва видео в този урок. Добавете YouTube линк и запазете отново.", "error");
+    document.getElementById('yt-url').value = `https://www.youtube.com/watch?v=${currentVideoId}`;
     window.loadEditorVideo(true);
 };
 
