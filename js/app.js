@@ -2109,6 +2109,73 @@ window.openAdminPanel = async function() {
     window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
   }
 };
+// --- ЗАРЕЖДАНЕ НА СПИСЪК С УЧИТЕЛИ ---
+window.loadTeachersList = async function() {
+  try {
+    console.log('👥 loadTeachersList called');
+    
+    const modal = document.getElementById('modal-teachers');
+    const loading = document.getElementById('teachers-loading');
+    const tableContainer = document.getElementById('teachers-table-container');
+    const errorDiv = document.getElementById('teachers-error');
+    const tbody = document.getElementById('teachers-list-body');
+
+    // Показваме модала и лоудъра
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    loading.classList.remove('hidden');
+    tableContainer.classList.add('hidden');
+    errorDiv.classList.add('hidden');
+
+    const getTeachersFunc = httpsCallable(functions, 'getTeachersList');
+    const result = await getTeachersFunc();
+    const teachers = result.data;
+
+    if (!teachers || teachers.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-400">Няма регистрирани учители.</td></tr>';
+    } else {
+      tbody.innerHTML = teachers.map(t => `
+        <tr class="border-b hover:bg-slate-50" data-uid="${t.uid}">
+          <td class="py-3 px-4 font-bold">${t.name}</td>
+          <td class="py-3 px-4">${t.email}</td>
+          <td class="py-3 px-4">
+            <span class="inline-block px-2 py-1 rounded-full text-[10px] font-black uppercase ${t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : t.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}">
+              ${t.status === 'active' ? '✅ Активен' : t.status === 'pending' ? '⏳ Чакащ' : '❌ Деактивиран'}
+            </span>
+          </td>
+          <td class="py-3 px-4 text-slate-500 text-sm">${t.registeredAt ? new Date(t.registeredAt * 1000).toLocaleDateString('bg-BG') : '—'}</td>
+          <td class="py-3 px-4 text-center">
+            ${t.status === 'pending' ? `<button onclick="window.approveTeacher('${t.uid}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-600 mr-2">✅ Одобри</button>` : ''}
+            ${t.status === 'active' ? `<button onclick="window.suspendTeacher('${t.uid}')" class="bg-amber-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase hover:bg-amber-600">⏸️ Деактивирай</button>` : ''}
+            ${t.status === 'suspended' ? `<button onclick="window.approveTeacher('${t.uid}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-600">✅ Активирай</button>` : ''}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    loading.classList.add('hidden');
+    tableContainer.classList.remove('hidden');
+  } catch (error) {
+    console.error('Error loading teachers:', error);
+    
+    const loading = document.getElementById('teachers-loading');
+    const errorDiv = document.getElementById('teachers-error');
+    if (loading) loading.classList.add('hidden');
+    if (errorDiv) {
+      errorDiv.classList.remove('hidden');
+      errorDiv.innerText = '❌ Грешка при зареждане на учителите.';
+    }
+  }
+};
+
+// --- ВРЕМЕННИ ФУНКЦИИ ЗА ОДОБРЕНИЕ/ДЕАКТИВИРАНЕ (ЩЕ ГИ НАПРАВИМ ПО-КЪСНО) ---
+window.approveTeacher = async (uid) => {
+  window.showMessage(`✅ Функцията за одобрение е в процес на разработка. UID: ${uid}`, "info");
+};
+
+window.suspendTeacher = async (uid) => {
+  window.showMessage(`⏸️ Функцията за деактивиране е в процес на разработка. UID: ${uid}`, "info");
+};
 // ----------------------------------------------------------------------
 // YT API
 // ----------------------------------------------------------------------
