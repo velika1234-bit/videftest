@@ -2325,18 +2325,9 @@ window.loadAdminDashboard = async function() {
         renderAdminStats(filteredRows);
     } catch (error) {
         const isPermissionError = error?.code === 'permission-denied';
-        const activeUid = user?.uid || 'unknown';
-        const isAdminUid = isCurrentUserAdmin();
-        const permissionBodyMessage = 'Няма админ достъп. Публикувайте правилата и влезте с admin UID.';
-        const permissionToastMessage = isAdminUid
-            ? '❌ Липсва Firestore достъп за admin UID. Публикувайте правилата от Rules модала.'
-            : '❌ Нямате админ права. Влезте с admin UID, за да отворите админ панела.';
-
         if (isPermissionError) {
-            console.warn('Admin dashboard blocked by Firestore rules or non-admin account:', { uid: activeUid, isAdminUid, code: error?.code });
-            if (isAdminUid) {
-                window.showRulesHelpModal();
-            }
+            console.warn('Admin dashboard blocked by Firestore rules or non-admin account:', error);
+            window.showRulesHelpModal();
         } else {
             console.error('Admin dashboard error:', error);
         }
@@ -2344,10 +2335,15 @@ window.loadAdminDashboard = async function() {
         const body = document.getElementById('admin-teachers-body');
         if (body) {
             body.innerHTML = isPermissionError
-                ? `<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">${permissionBodyMessage}</td></tr>`
+                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп. Публикувайте правилата и влезте с admin UID.</td></tr>'
                 : '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
         }
-        window.showMessage(isPermissionError ? permissionToastMessage : '❌ Неуспешно зареждане на админ данни.', 'error');
+        window.showMessage(
+            isPermissionError
+                ? '❌ Няма админ достъп: публикувайте правилата и влезте с admin UID. Отворен е Rules модал.'
+                : '❌ Неуспешно зареждане на админ данни.',
+            'error'
+        );
     } finally {
         setAdminLoading(false);
     }
