@@ -2321,12 +2321,26 @@ window.loadAdminDashboard = async function() {
 
         renderAdminStats(filteredRows);
     } catch (error) {
-        console.error('Admin dashboard error:', error);
+        const isPermissionError = error?.code === 'permission-denied';
+        if (isPermissionError) {
+            console.warn('Admin dashboard blocked by Firestore rules:', error);
+            window.showRulesHelpModal();
+        } else {
+            console.error('Admin dashboard error:', error);
+        }
+
         const body = document.getElementById('admin-teachers-body');
         if (body) {
-            body.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
+            body.innerHTML = isPermissionError
+                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп по Firestore rules. Публикувайте правилата от помощния модал.</td></tr>'
+                : '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
         }
-        window.showMessage('❌ Неуспешно зареждане на админ данни.', 'error');
+        window.showMessage(
+            isPermissionError
+                ? '❌ Липсват Firestore права за админ панела. Отворен е Rules модал с точния код.'
+                : '❌ Неуспешно зареждане на админ данни.',
+            'error'
+        );
     } finally {
         setAdminLoading(false);
     }

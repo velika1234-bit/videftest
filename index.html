@@ -24,6 +24,7 @@
 
     <!-- Персонализирани стилове -->
     <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="favicon.ico" sizes="any">
 </head>
 <body class="bg-slate-50 min-h-screen">
 
@@ -437,6 +438,10 @@ service cloud.firestore {
 
     match /artifacts/{appId} {
       allow read, write: if false;
+
+      match /users/{userId}/settings/profile {
+        allow read, write: if isSignedIn() &amp;&amp; (request.auth.uid == userId || isAdmin());
+      }
 
       match /public/data/{document=**} {
         allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];

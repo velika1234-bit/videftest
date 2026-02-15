@@ -14,6 +14,13 @@ service cloud.firestore {
     match /artifacts/{appId} {
       allow read, write: if false;
 
+      // ВАЖНО: profile docs са четени чрез collectionGroup('profile') от admin панела.
+      // Ако тук ограничим appId до конкретен списък, query-то може да fail-не с
+      // Missing or insufficient permissions заради други appId scope-ове.
+      match /users/{userId}/settings/profile {
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      }
+
       match /public/data/{document=**} {
         // Публична част (join/live flow)
         allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
