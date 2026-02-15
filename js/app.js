@@ -1,28 +1,13 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { db, auth, finalAppId } from './firebase.js';
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
 
 // Backward-compatible globals (за стари извиквания window.formatDate/window.formatTime)
 window.formatDate = formatDate;
 window.formatTime = formatTime;
-// --- FIREBASE CONFIGURATION ---
-const firebaseConfig = {
-    apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
-    authDomain: "videoquiz-ultimate.firebaseapp.com",
-    projectId: "videoquiz-ultimate",
-    storageBucket: "videoquiz-ultimate.firebasestorage.app",
-    messagingSenderId: "793138692820",
-    appId: "1:793138692820:web:8ee2418d28d47fca6bf141"
-};
-
-const finalAppId = 'videoquiz-ultimate-live';
 const legacyAppId = 'videoquiz-ultimate';
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
 // --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
