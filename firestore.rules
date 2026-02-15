@@ -19,7 +19,6 @@ service cloud.firestore {
       return hasAdminProfileIn('videoquiz-ultimate-live') || hasAdminProfileIn('videoquiz-ultimate');
     }
 
-    // ВАЖНО: тук трябва да има само ЕДИН return ред (без дублиране).
     function isAdmin() {
       return isSignedIn() && (request.auth.uid == 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2' || hasAdminProfile());
     }

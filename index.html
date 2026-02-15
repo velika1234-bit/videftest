@@ -424,6 +424,7 @@
                         <li>Уверете се, че сте влезли с <strong>admin</strong> акаунт (master UID или profile role/accessLevel = admin в current/legacy app scope).</li>
                         <li>Изтрийте всичко там и поставете този код (копирайте целия блок 1:1, без дублирани редове):</li>
                         <li>Ако видите грешка <strong>mismatched input 'return'</strong>, проверете функцията <code>isAdmin()</code> да съдържа само <strong>един</strong> <code>return</code>.</li>
+                        <li>Изтрийте всичко там и поставете този код:</li>
                     </ol>
                     
                     <div class="relative group">
@@ -482,6 +483,7 @@ service cloud.firestore {
                     </div>
                     
                     <p class="text-xs text-slate-400 text-center font-bold uppercase mt-2">След това натиснете "Publish". Ако има compile грешка, оправете я в Rules редактора, после пак "Publish", влезте с admin акаунта и презаредете тази страница.</p>
+                    <p class="text-xs text-slate-400 text-center font-bold uppercase mt-2">След това натиснете "Publish", влезте с admin акаунта и презаредете тази страница.</p>
                 </div>
 
                 <button onclick="location.reload()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase shadow-xl hover:bg-indigo-700 transition-all text-sm shadow-indigo-200">Готово, презареди!</button>
