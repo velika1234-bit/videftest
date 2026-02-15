@@ -193,6 +193,25 @@ window.resolveTeacherUidFromCode = async (decoded) => {
 };
 
 
+
+const normalizeQuizPayload = (rawQuiz) => {
+    if (!rawQuiz || typeof rawQuiz !== 'object') return null;
+    const videoId = rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
+    const questionList = Array.isArray(rawQuiz.q)
+        ? rawQuiz.q
+        : (Array.isArray(rawQuiz.questions) ? rawQuiz.questions : []);
+
+    if (!videoId || questionList.length === 0) return null;
+
+    return {
+        ...rawQuiz,
+        v: videoId,
+        q: questionList,
+        questions: questionList,
+        title: rawQuiz.title || rawQuiz.name || 'Без име'
+    };
+};
+
 window.switchScreen = (name) => {
     document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
     const target = document.getElementById('screen-' + name);
@@ -579,7 +598,7 @@ window.initHostPlayer = () => {
     document.getElementById('host-video-container').innerHTML = '<div id="host-video"></div>';
     hostPlayer = new YT.Player('host-video', {
         videoId: currentQuiz.v,
-        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1 },
+        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1, 'origin': window.location.origin },
         events: {
             'onReady': (event) => event.target.playVideo(),
             'onStateChange': async (e) => {
@@ -1414,7 +1433,9 @@ window.startIndividual = async () => {
     sopModeEnabled = !!document.getElementById('ind-sop-mode')?.checked;
     const name = isDiscussionMode ? "Обсъждане" : prompt("Вашето име:");
     if (!name) return;
-    studentNameValue = name; currentQuiz = decoded;
+    const normalizedQuiz = normalizeQuizPayload(decoded);
+    if (!normalizedQuiz) return window.showMessage("Кодът е невалиден или непълен (липсва видео/въпроси).", 'error');
+    studentNameValue = name; currentQuiz = normalizedQuiz;
     currentQuizOwnerId = await window.resolveTeacherUidFromCode(decoded);
     if (!currentQuizOwnerId) {
         return window.showMessage("Кодът не е свързан еднозначно с учител. Генерирайте нов код от профила на учителя.", 'error');
@@ -1440,7 +1461,7 @@ window.initSolvePlayer = () => {
     document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
     solvePlayer = new YT.Player('solve-player', {
         videoId: currentQuiz.v, width: '100%', height: '100%',
-        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1 },
+        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1, 'origin': window.location.origin },
         events: { 'onStateChange': (e) => {
             if (e.data === YT.PlayerState.ENDED) {
                 window.finishSoloGame();
@@ -1745,7 +1766,7 @@ window.loadEditorVideo = (isEdit = false) => {
     currentVideoId = id;
     document.getElementById('editor-view').classList.remove('hidden');
     document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
-    player = new YT.Player('player', { videoId: id, events: { 'onReady': () => {
+    player = new YT.Player('player', { videoId: id, playerVars: { 'origin': window.location.origin, 'playsinline': 1, 'rel': 0 }, events: { 'onReady': () => {
         const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = formatTime(player.getCurrentTime()); }, 500);
         activeIntervals.push(i);
     }}});
