@@ -3,7 +3,6 @@ import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimest
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
-utils.js
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -1978,29 +1977,8 @@ window.deleteQuiz = async (id) => {
         window.showMessage("Урокът е изтрит.", "info");
     }
 };
-// --- Разрешаване на достъп до хранилище (за блокирани ученици) ---
-window.requestStorageAccess = async function() {
-    try {
-        if (document.requestStorageAccess) {
-            await document.requestStorageAccess();
-            window.showMessage("✅ Достъпът е разрешен! Моля, презаредете страницата.", "success");
-            setTimeout(() => location.reload(), 2000);
-        } else {
-            window.showMessage("ℹ️ Вашият браузър не поддържа тази функция. Моля, разрешете 'Достъп до хранилище' от адресната лента.", "info");
-        }
-    } catch (e) {
-        console.error(e);
-        window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
-    }
-};
-// Закачане на helper функциите към window
-window.formatTime = formatTime;
-window.formatDate = formatDate;
-window.parseScoreValue = parseScoreValue;
-window.decodeQuizCode = decodeQuizCode;
-window.shuffleArray = shuffleArray;
+
 // --- YT API ---
-window.formatDate = formatDate;
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
     console.log("YouTube API Ready");
