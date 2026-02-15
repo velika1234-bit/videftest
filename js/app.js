@@ -2087,7 +2087,6 @@ window.deleteQuiz = async (id) => {
         window.showMessage("Урокът е изтрит.", "info");
     }
 };
-// --- АДМИНИСТРАТОРСКИ ПАНЕЛ ---
 window.openAdminPanel = async function() {
   try {
     console.log('📊 openAdminPanel called');
@@ -2102,22 +2101,9 @@ window.openAdminPanel = async function() {
     const token = await auth.currentUser.getIdToken(true);
     console.log('✅ Токен обновен:', token.substring(0, 20) + '...');
 
-    window.showMessage("📊 Зареждам статистики...", "info");
-
-    const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
-    const result = await getAdminStatsFunc();
-    const stats = result.data;
-
-    const message = `📊 АДМИН СТАТИСТИКИ:
-━━━━━━━━━━━━━━━━━━━━━
-👥 Учители: ${stats.totalTeachers}
-📚 Уроци: ${stats.totalQuizzes}
-📝 Соло резултати: ${stats.totalSoloResults}
-🎬 Сесии на живо: ${stats.totalSessions}
-👩‍🎓 Участници (общо): ${stats.totalParticipants}
-━━━━━━━━━━━━━━━━━━━━━`;
-
-    window.showMessage(message, "info", 15000);
+    // 👇 ТОВА Е ПРОМЕНАТА – ВЕДНАГА ЗАРЕЖДАМЕ СПИСЪКА С УЧИТЕЛИ
+    window.loadTeachersList();
+    
   } catch (error) {
     console.error("Admin panel error:", error);
     window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
