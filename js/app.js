@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
 
@@ -24,15 +23,12 @@ const legacyAppId = 'videoquiz-ultimate';
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const functions = getFunctions(app, 'us-central1');
 // --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
 let isTeacher = false;
 let editingQuizId = null;
 let editingQuestionIndex = null;
-const MASTER_TEACHER_CODE = "vilidaf76";
-
 let player, solvePlayer, hostPlayer;
 let questions = [], currentQuiz = null, studentNameValue = "";
 let sessionID = "", liveActiveQIdx = -1;
@@ -55,6 +51,15 @@ let participantStorageMode = 'legacy';
 let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
+let currentAccessLevel = 'tester';
+const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
+const MASTER_TEACHER_CODE = "vilidaf76";
+const MASTER_TESTER_CODE = "tester3";
+const ACCESS_LIMITS = {
+    tester: 3,
+    teacher: 20,
+    admin: Number.POSITIVE_INFINITY
+};
 
 // Helper functions for Firestore paths
 const getTeacherSoloResultsCollection = (teacherId) => collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
@@ -65,6 +70,7 @@ const getParticipantRef = (sessionId, participantId) => doc(db, 'artifacts', fin
 const getLegacyParticipantsCollection = () => collection(db, 'artifacts', finalAppId, 'public', 'data', 'participants');
 const getLegacyParticipantRef = (participantId) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'participants', participantId);
 const getActiveParticipantRef = (sessionId, participantId) => participantStorageMode === 'legacy' ? getLegacyParticipantRef(participantId) : getParticipantRef(sessionId, participantId);
+const getSessionsCollection = () => collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions');
 
 window.tempLiveSelection = null;
 
@@ -80,6 +86,53 @@ const safeSetHTML = (id, html) => {
     if (el) el.innerHTML = html;
 };
 
+const resolveAccessLevel = (profile = {}, uid = null) => {
+    if (uid && uid === ADMIN_UID) return 'admin';
+    const level = String(profile?.accessLevel || '').toLowerCase();
+    if (level === 'admin' || level === 'teacher' || level === 'tester') return level;
+    const role = String(profile?.role || '').toLowerCase();
+    if (role === 'admin') return 'admin';
+    if (role === 'teacher') return 'teacher';
+    return 'tester';
+};
+
+const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.tester;
+
+const canCreateMoreLessons = () => {
+    const limit = getLessonLimit();
+    if (!Number.isFinite(limit)) return true;
+    return myQuizzes.length < limit;
+};
+
+const updateAccessUI = () => {
+    const titleEl = document.getElementById('teacher-plan-badge');
+    const detailsEl = document.getElementById('teacher-plan-details');
+    const createBtn = document.getElementById('create-lesson-btn');
+    const shareNote = document.getElementById('share-code-note');
+    const limit = getLessonLimit();
+    const levelLabels = { tester: 'Тестер', teacher: 'Учител', admin: 'Администратор' };
+
+    if (titleEl) {
+        titleEl.innerText = `Права: ${levelLabels[currentAccessLevel] || 'Тестер'}`;
+    }
+    if (detailsEl) {
+        detailsEl.innerText = Number.isFinite(limit)
+            ? `Лимит уроци: ${myQuizzes.length}/${limit}. Сесии в клас и дълъг код: разрешени.`
+            : 'Лимит уроци: неограничен. Пълни и неограничени права.';
+    }
+    if (createBtn) {
+        const enabled = canCreateMoreLessons();
+        createBtn.disabled = !enabled;
+        createBtn.classList.toggle('opacity-50', !enabled);
+        createBtn.title = enabled
+            ? 'Създай нов урок'
+            : `Достигнат лимит от ${limit} урока за вашия план.`;
+    }
+    if (shareNote) {
+        shareNote.innerText = 'Генерира се дълъг код (Base64) за тест/импорт на урок.';
+    }
+};
+
 // --- AUTH LOGIC ---
 onAuthStateChanged(auth, async (u) => {
     const incomingUid = u?.uid || null;
@@ -89,7 +142,6 @@ onAuthStateChanged(auth, async (u) => {
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
         // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
-const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
 const adminBtn = document.getElementById('admin-panel-btn');
 if (adminBtn) {
   if (incomingUid === ADMIN_UID) {
@@ -112,10 +164,14 @@ if (adminBtn) {
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
         try {
             const profileSnap = await getDoc(profileRef);
-            if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
-                isTeacher = true;
+            const profileData = profileSnap.exists() ? profileSnap.data() : {};
+            currentAccessLevel = resolveAccessLevel(profileData, incomingUid);
+            isTeacher = currentAccessLevel === 'teacher' || currentAccessLevel === 'admin' || currentAccessLevel === 'tester';
+
+            if (isTeacher) {
                 window.loadMyQuizzes();
                 window.loadSoloResults();
+                updateAccessUI();
                 if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
                     window.switchScreen('teacher-dashboard');
                 }
@@ -127,6 +183,8 @@ if (adminBtn) {
             if (e.code === 'permission-denied') window.showRulesHelpModal();
         }
     } else {
+        currentAccessLevel = 'tester';
+        updateAccessUI();
         window.switchScreen('welcome');
     }
 });
@@ -220,9 +278,33 @@ const normalizeQuizPayload = (rawQuiz) => {
         questions: questionList,
         title: rawQuiz.title || rawQuiz.name || 'Без име'
     };
+
+};
+
+const normalizeStoredQuiz = (rawQuiz) => {
+    if (!rawQuiz || typeof rawQuiz !== 'object') return null;
+    const normalized = normalizeQuizPayload(rawQuiz);
+    const videoId = normalized?.v || rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
+    const questionList = normalized?.q
+        || (Array.isArray(rawQuiz.questions) ? rawQuiz.questions : (Array.isArray(rawQuiz.q) ? rawQuiz.q : []));
+
+    return {
+        ...rawQuiz,
+        id: rawQuiz.id,
+        title: normalized?.title || rawQuiz.title || rawQuiz.name || 'Без име',
+        v: videoId,
+        questions: questionList,
+        q: questionList
+    };
 };
 
 window.switchScreen = (name) => {
+
+    if (name === 'create' && !editingQuizId && !canCreateMoreLessons()) {
+        const limit = getLessonLimit();
+        window.showMessage(`Достигнахте лимита от ${limit} урока за вашите права.`, 'error');
+        name = 'teacher-dashboard';
+    }
 
     document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
     const target = document.getElementById('screen-' + name);
@@ -247,6 +329,7 @@ window.switchScreen = (name) => {
     if (name === 'teacher-dashboard' && user) {
         window.loadMyQuizzes();
         window.loadSoloResults();
+        updateAccessUI();
     }
     if (window.lucide) lucide.createIcons();
     window.scrollTo(0, 0);
@@ -317,12 +400,18 @@ window.handleAuthSubmit = async () => {
     try {
         if (authMode === 'register') {
             const code = document.getElementById('auth-teacher-code').value.trim();
-            if (code !== MASTER_TEACHER_CODE) return window.showMessage("Грешен код за учител!", "error");
+            let registerAccessLevel = null;
+            if (code === MASTER_TEACHER_CODE) registerAccessLevel = 'teacher';
+            if (code === MASTER_TESTER_CODE) registerAccessLevel = 'tester';
+            if (!registerAccessLevel) {
+                return window.showMessage("Грешен код за достъп!", "error");
+            }
 
             try {
                 const cred = await createUserWithEmailAndPassword(auth, email, pass);
                 await setDoc(doc(db, 'artifacts', finalAppId, 'users', cred.user.uid, 'settings', 'profile'), {
                     role: 'teacher',
+                    accessLevel: registerAccessLevel,
                     email: email,
                     emailNormalized: email.toLowerCase(),
                     activatedAt: serverTimestamp()
@@ -339,6 +428,7 @@ window.handleAuthSubmit = async () => {
                     }
                     await setDoc(doc(db, 'artifacts', finalAppId, 'users', anonUser.uid, 'settings', 'profile'), {
                         role: 'teacher',
+                        accessLevel: 'tester',
                         email: email + " (Guest)",
                         emailNormalized: email.toLowerCase(),
                         activatedAt: serverTimestamp(),
@@ -412,6 +502,10 @@ window.submitImport = () => {
 
 window.saveImportedQuiz = async (data) => {
     if (!user) return;
+    if (!canCreateMoreLessons()) {
+        const limit = getLessonLimit();
+        return window.showMessage(`Достигнахте лимита от ${limit} урока за вашите права.`, 'error');
+    }
     window.showMessage("Импортиране...");
     try {
         await addDoc(getTeacherQuizzesCollection(user.uid), {
@@ -426,7 +520,7 @@ window.saveImportedQuiz = async (data) => {
 
 // --- FIREBASE DATA OPS ---
 window.loadMyQuizzes = async () => {
-    if (!user) return;
+    if (!user) { updateAccessUI(); return; }
 
     const normalizeStoredQuizSafe = typeof normalizeStoredQuiz === 'function'
         ? normalizeStoredQuiz
@@ -458,6 +552,7 @@ window.loadMyQuizzes = async () => {
         });
         myQuizzes = Array.from(mergedByKey.values());
         renderMyQuizzes();
+        updateAccessUI();
     };
 
     const attachListener = (appId) => {
@@ -2054,6 +2149,10 @@ window.deleteEditorQuestion = (i) => { if (confirm("Изтриване на въ
 
 window.saveQuizToLibrary = async () => {
     if (!user) return;
+    if (!editingQuizId && !canCreateMoreLessons()) {
+        const limit = getLessonLimit();
+        return window.showMessage(`Достигнахте лимита от ${limit} урока за вашите права.`, 'error');
+    }
     let title = "";
     const existing = editingQuizId ? myQuizzes.find(x => x.id === editingQuizId) : null;
     title = prompt("Име на урока:", existing?.title || "");
@@ -2130,28 +2229,115 @@ window.requestStorageAccess = async function() {
     }
 };
 // --- АДМИНИСТРАТОРСКИ ПАНЕЛ (само за admin) ---
+const isCurrentUserAdmin = () => !!user && user.uid === ADMIN_UID;
+
+const setAdminLoading = (isLoading) => {
+    const loadingEl = document.getElementById('admin-loading');
+    const contentEl = document.getElementById('admin-content');
+    if (!loadingEl || !contentEl) return;
+    if (isLoading) {
+        loadingEl.classList.remove('hidden');
+        contentEl.classList.add('hidden');
+    } else {
+        loadingEl.classList.add('hidden');
+        contentEl.classList.remove('hidden');
+    }
+};
+
+const renderAdminStats = (rows = []) => {
+    const totals = rows.reduce((acc, row) => {
+        acc.lessons += row.lessons;
+        acc.live += row.liveSessions;
+        acc.solo += row.soloSessions;
+        return acc;
+    }, { lessons: 0, live: 0, solo: 0 });
+
+    safeSetText('admin-total-teachers', String(rows.length));
+    safeSetText('admin-total-lessons', String(totals.lessons));
+    safeSetText('admin-total-live-sessions', String(totals.live));
+    safeSetText('admin-total-solo-sessions', String(totals.solo));
+
+    const body = document.getElementById('admin-teachers-body');
+    if (!body) return;
+    body.innerHTML = rows.map((row, idx) => `
+        <tr class="border-b text-xs hover:bg-slate-50">
+            <td class="py-3 px-3 font-black text-slate-500">${idx + 1}</td>
+            <td class="py-3 px-3">
+                <p class="font-bold text-slate-800">${row.name}</p>
+                <p class="text-[10px] text-slate-400">${row.email}</p>
+                <p class="text-[9px] text-slate-300 font-mono mt-1">${row.uid}</p>
+            </td>
+            <td class="py-3 px-3 text-center font-black text-indigo-600">${row.lessons}</td>
+            <td class="py-3 px-3 text-center font-black text-emerald-600">${row.liveSessions}</td>
+            <td class="py-3 px-3 text-center font-black text-amber-600">${row.soloSessions}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="5" class="py-8 text-center text-slate-300 italic">Няма намерени учители.</td></tr>';
+};
+
+window.loadAdminDashboard = async function() {
+    if (!isCurrentUserAdmin()) {
+        window.showMessage('Нямате достъп до админ панела.', 'error');
+        window.switchScreen('teacher-dashboard');
+        return;
+    }
+
+    setAdminLoading(true);
+    try {
+        const teachersQ = query(collectionGroup(db, 'profile'), where('role', '==', 'teacher'));
+        const teachersSnap = await getDocs(teachersQ);
+
+        const teacherRows = await Promise.all(teachersSnap.docs.map(async (teacherDoc) => {
+            const teacherUid = teacherDoc.ref.parent.parent?.id || null;
+            const teacherData = teacherDoc.data() || {};
+            if (!teacherUid) {
+                return null;
+            }
+
+            const [quizzesSnap, legacyQuizzesSnap, soloSnap, liveSnap] = await Promise.all([
+                getDocs(getTeacherQuizzesCollection(teacherUid, finalAppId)),
+                getDocs(getTeacherQuizzesCollection(teacherUid, legacyAppId)),
+                getDocs(getTeacherSoloResultsCollection(teacherUid)),
+                getDocs(query(getSessionsCollection(), where('hostId', '==', teacherUid)))
+            ]);
+
+            const uniqueQuizIds = new Set([
+                ...quizzesSnap.docs.map((docSnap) => `${finalAppId}:${docSnap.id}`),
+                ...legacyQuizzesSnap.docs.map((docSnap) => `${legacyAppId}:${docSnap.id}`)
+            ]);
+
+            return {
+                uid: teacherUid,
+                name: teacherData.name || teacherData.displayName || teacherData.fullName || 'Учител',
+                email: teacherData.email || 'без имейл',
+                lessons: uniqueQuizIds.size,
+                liveSessions: liveSnap.size,
+                soloSessions: soloSnap.size
+            };
+        }));
+
+        const filteredRows = teacherRows
+            .filter(Boolean)
+            .sort((a, b) => (b.lessons + b.liveSessions + b.soloSessions) - (a.lessons + a.liveSessions + a.soloSessions));
+
+        renderAdminStats(filteredRows);
+    } catch (error) {
+        console.error('Admin dashboard error:', error);
+        const body = document.getElementById('admin-teachers-body');
+        if (body) {
+            body.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
+        }
+        window.showMessage('❌ Неуспешно зареждане на админ данни.', 'error');
+    } finally {
+        setAdminLoading(false);
+    }
+};
+
 window.openAdminPanel = async function() {
-  try {
-    window.showMessage("📊 Зареждам статистики...", "info");
-    
-    const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
-    const result = await getAdminStatsFunc();
-    const stats = result.data;
-    
-    const message = `📊 АДМИН СТАТИСТИКИ:
-━━━━━━━━━━━━━━━━━━━━━
-👥 Учители: ${stats.totalTeachers}
-📚 Уроци: ${stats.totalQuizzes}
-📝 Соло резултати: ${stats.totalSoloResults}
-🎬 Сесии на живо: ${stats.totalSessions}
-👩‍🎓 Участници (общо): ${stats.totalParticipants}
-━━━━━━━━━━━━━━━━━━━━━`;
-    
-    window.showMessage(message, "info", 15000); // показва се 15 секунди
-  } catch (error) {
-    console.error("Admin panel error:", error);
-    window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
-  }
+    if (!isCurrentUserAdmin()) {
+        return window.showMessage('Нямате права за админ панела.', 'error');
+    }
+    window.switchScreen('admin');
+    await window.loadAdminDashboard();
 };
 // --- YT API ---
 window.onYouTubeIframeAPIReady = function() {

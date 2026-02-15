@@ -81,11 +81,16 @@
             <div class="flex flex-col md:flex-row items-center justify-between bg-white p-6 sm:p-10 rounded-[3.5rem] border shadow-sm gap-6">
                 <h2 class="text-2xl sm:text-4xl font-black text-slate-900 leading-none">Библиотека</h2>
                 <div class="flex flex-wrap gap-2 justify-center">
-                    <button onclick="window.switchScreen('create')" class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-indigo-100">+ Нов Урок</button>
+                    <button id="create-lesson-btn" onclick="window.switchScreen('create')" class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-indigo-100">+ Нов Урок</button>
                     <button onclick="window.openImportModal()" class="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-emerald-100">Импорт с код</button>
                     <button onclick="window.handleLogout()" class="bg-slate-100 text-slate-500 px-8 py-4 rounded-2xl font-black uppercase text-[10px]">Изход</button>
                     <button id="admin-panel-btn" onclick="window.openAdminPanel()" class="hidden bg-purple-700 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-purple-200">📊 Админ панел</button>
                 </div>
+            </div>
+
+            <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-center">
+                <p id="teacher-plan-badge" class="text-xs font-black uppercase tracking-widest text-indigo-700">Права: Тестер</p>
+                <p id="teacher-plan-details" class="text-[11px] text-indigo-500 font-bold mt-1">Лимит уроци: 0/3. Сесии в клас и дълъг код: разрешени.</p>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -123,6 +128,63 @@
             </div>
         </div>
 
+        <!-- Admin Dashboard Screen -->
+        <div id="screen-admin" class="hidden animate-pop space-y-6">
+            <div class="bg-white p-6 sm:p-8 rounded-[3rem] border shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div>
+                    <h2 class="text-2xl sm:text-4xl font-black text-purple-700 leading-none">Администраторски панел</h2>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-2">Учители, уроци и сесии</p>
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto">
+                    <button onclick="window.loadAdminDashboard()" class="flex-1 sm:flex-none bg-purple-700 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px]">Обнови</button>
+                    <button onclick="window.switchScreen('teacher-dashboard')" class="flex-1 sm:flex-none bg-slate-100 text-slate-600 px-6 py-4 rounded-2xl font-black uppercase text-[10px]">Назад</button>
+                </div>
+            </div>
+
+            <div id="admin-loading" class="bg-white rounded-[2.5rem] border shadow-sm p-10 text-center text-slate-400 font-black uppercase text-xs tracking-widest hidden">
+                Зареждане на админ данни...
+            </div>
+
+            <div id="admin-content" class="space-y-6 hidden">
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-3xl border p-5 text-center shadow-sm">
+                        <p class="text-[10px] uppercase font-black text-slate-400">Учители</p>
+                        <p id="admin-total-teachers" class="text-3xl font-black text-purple-700">0</p>
+                    </div>
+                    <div class="bg-white rounded-3xl border p-5 text-center shadow-sm">
+                        <p class="text-[10px] uppercase font-black text-slate-400">Уроци</p>
+                        <p id="admin-total-lessons" class="text-3xl font-black text-indigo-600">0</p>
+                    </div>
+                    <div class="bg-white rounded-3xl border p-5 text-center shadow-sm">
+                        <p class="text-[10px] uppercase font-black text-slate-400">Сесии в клас</p>
+                        <p id="admin-total-live-sessions" class="text-3xl font-black text-emerald-600">0</p>
+                    </div>
+                    <div class="bg-white rounded-3xl border p-5 text-center shadow-sm">
+                        <p class="text-[10px] uppercase font-black text-slate-400">Самостоятелни</p>
+                        <p id="admin-total-solo-sessions" class="text-3xl font-black text-amber-600">0</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden">
+                    <div class="p-4 border-b text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Регистрирани учители</div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left min-w-[720px]">
+                            <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-black">
+                                <tr>
+                                    <th class="py-3 px-3">#</th>
+                                    <th class="py-3 px-3">Учител</th>
+                                    <th class="py-3 px-3 text-center">Уроци</th>
+                                    <th class="py-3 px-3 text-center">Сесии в клас</th>
+                                    <th class="py-3 px-3 text-center">Самостоятелни</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-teachers-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Teacher Auth Screen -->
         <div id="screen-teacher-auth" class="hidden py-10 animate-pop">
             <div class="max-w-md mx-auto bg-white p-10 rounded-[3rem] border shadow-2xl text-center space-y-6">
@@ -142,7 +204,7 @@
                         <input type="password" id="auth-password" class="w-full p-4 bg-slate-50 rounded-2xl border-2 font-bold outline-none text-sm">
                     </div>
                     <div id="auth-teacher-code-container" class="hidden">
-                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Секретен Код (само за учители)</label>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Секретен Код (учител/тестер)</label>
                         <input type="password" id="auth-teacher-code" placeholder="Код..." class="w-full p-4 bg-indigo-50 border-2 border-indigo-100 rounded-2xl font-black text-center outline-none text-sm">
                     </div>
                 </div>
@@ -318,6 +380,7 @@
             <div class="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-pop text-center space-y-8">
                 <h2 class="text-xl font-black text-slate-900">Код на урока</h2>
                 <textarea id="share-code-display" readonly class="w-full p-5 bg-slate-50 rounded-2xl border font-mono text-[10px] break-all h-32 outline-none shadow-inner"></textarea>
+                <p id="share-code-note" class="text-[10px] text-slate-400 font-bold">Генерира се дълъг код (Base64) за тест/импорт на урок.</p>
                 <div class="grid grid-cols-2 gap-4">
                     <button onclick="window.copyShareCode()" class="bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase shadow-xl text-[10px]">Копирай</button>
                     <button onclick="document.getElementById('modal-share').classList.add('hidden')" class="bg-slate-100 text-slate-500 py-5 rounded-2xl font-black uppercase text-[10px]">Затвори</button>
