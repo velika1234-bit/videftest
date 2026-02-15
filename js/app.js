@@ -1,8 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-// --- Импортиране на helper функции от utils.js ---
-import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
+
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -61,6 +60,7 @@ const getActiveParticipantRef = (sessionId, participantId) => participantStorage
 
 window.tempLiveSelection = null;
 
+const AVATARS = ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦", "🐤", "🦄", "🐝", "🦋", "🐌", "🐞", "🐙", "🐬"];
 
 // --- SAFE DOM HELPERS ---
 const safeSetText = (id, text) => {
@@ -138,6 +138,16 @@ setTimeout(() => {
 initAuth();
 
 // --- HELPER FUNCTIONS ---
+window.decodeQuizCode = (code) => {
+    if (!code) return null;
+    try {
+        const cleanCode = code.trim().replace(/\s/g, '');
+        return JSON.parse(decodeURIComponent(escape(atob(cleanCode))));
+    } catch (e) {
+        try { return JSON.parse(atob(code.trim())); } catch(err) { return null; }
+    }
+};
+
 window.resolveTeacherUidFromCode = async (decoded) => {
     if (!decoded) return null;
     const explicitOwnerId = decoded.ownerId || decoded.teacherId || null;
@@ -177,6 +187,36 @@ window.resolveTeacherUidFromCode = async (decoded) => {
     return null;
 };
 
+window.formatTime = (s) => {
+    const m = Math.floor(s / 60), r = Math.floor(s % 60);
+    return `${m < 10 ? '0' + m : m}:${r < 10 ? '0' + r : r}`;
+};
+
+window.formatDate = (timestamp) => {
+    if (!timestamp) return '-';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleString('bg-BG', {
+        day: '2-digit', month: '2-digit', year: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+    });
+};
+
+const getTimestampMs = (value) => {
+    if (!value) return 0;
+    if (typeof value === 'number') return value;
+    if (typeof value?.toMillis === 'function') return value.toMillis();
+    if (typeof value?.toDate === 'function') return value.toDate().getTime();
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const parseScoreValue = (scoreText) => {
+    if (!scoreText) return { score: 0, total: 0 };
+    const parts = String(scoreText).split('/').map(s => parseInt(s.trim(), 10));
+    const score = Number.isFinite(parts[0]) ? parts[0] : 0;
+    const total = Number.isFinite(parts[1]) ? parts[1] : 0;
+    return { score, total };
+};
 
 window.switchScreen = (name) => {
     document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
@@ -1977,21 +2017,7 @@ window.deleteQuiz = async (id) => {
         window.showMessage("Урокът е изтрит.", "info");
     }
 };
-// --- Разрешаване на достъп до хранилище (за блокирани ученици) ---
-window.requestStorageAccess = async function() {
-    try {
-        if (document.requestStorageAccess) {
-            await document.requestStorageAccess();
-            window.showMessage("✅ Достъпът е разрешен! Моля, презаредете страницата.", "success");
-            setTimeout(() => location.reload(), 2000);
-        } else {
-            window.showMessage("ℹ️ Вашият браузър не поддържа тази функция. Моля, разрешете 'Достъп до хранилище' от адресната лента.", "info");
-        }
-    } catch (e) {
-        console.error(e);
-        window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
-    }
-};
+
 // --- YT API ---
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
