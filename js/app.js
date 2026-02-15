@@ -1,6 +1,5 @@
 // ============================================
-// VideoQuiz Ultimate - ОСНОВЕН МОДУЛ
-// Версия: Стабилна + проверка за статус на учител
+// VideoQuiz Ultimate - ПЪЛНА РАБОТЕЩА ВЕРСИЯ
 // ============================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -163,7 +162,7 @@ window.switchScreen = (name) => {
     window.scrollTo(0, 0);
 };
 
-window.showMessage = (text, type = 'info') => {
+window.showMessage = (text, type = 'info', duration = 4000) => {
     const container = document.getElementById('msg-container');
     if (!container) return;
     const msg = document.createElement('div');
@@ -174,7 +173,7 @@ window.showMessage = (text, type = 'info') => {
     setTimeout(() => {
         msg.classList.add('opacity-0');
         setTimeout(() => msg.remove(), 500);
-    }, 4000);
+    }, duration);
 };
 
 window.quitHostSession = () => {
@@ -215,7 +214,6 @@ onAuthStateChanged(auth, async (u) => {
         try {
             const profileSnap = await getDoc(profileRef);
             
-            // --- Случаи, в които няма профил (анонимни, ученици) ---
             if (!profileSnap.exists()) {
                 if (!isAnon) {
                     window.switchScreen('welcome');
@@ -223,9 +221,9 @@ onAuthStateChanged(auth, async (u) => {
                 return;
             }
 
-            const profileData = profileSnap.data();
+            let profileData = profileSnap.data();
 
-            // --- Актуализация на стари профили (без name и status) ---
+            // Актуализация на стари профили (без name и status)
             const updates = {};
             if (!profileData.name) {
                 updates.name = '(Без име)';
@@ -235,14 +233,12 @@ onAuthStateChanged(auth, async (u) => {
             }
             if (Object.keys(updates).length > 0) {
                 await updateDoc(profileRef, updates);
-                // Презареждаме данните
                 const updatedSnap = await getDoc(profileRef);
                 profileData = updatedSnap.data();
             }
 
-            // --- Само учители ---
             if (profileData.role === 'teacher') {
-                // --- ПРОВЕРКА НА СТАТУСА ---
+                // Проверка на статуса
                 if (profileData.status === 'pending') {
                     window.showMessage("⏳ Вашият профил чака одобрение от администратор.", "info");
                     window.switchScreen('welcome');
@@ -255,7 +251,6 @@ onAuthStateChanged(auth, async (u) => {
                     return;
                 }
 
-                // Само active учителите продължават
                 isTeacher = true;
                 window.loadMyQuizzes();
                 window.loadSoloResults();
@@ -263,7 +258,6 @@ onAuthStateChanged(auth, async (u) => {
                     window.switchScreen('teacher-dashboard');
                 }
             } else {
-                // Обикновени потребители (неучители) – пращаме към welcome
                 window.switchScreen('welcome');
             }
         } catch (e) {
@@ -274,7 +268,7 @@ onAuthStateChanged(auth, async (u) => {
         window.switchScreen('welcome');
     }
 
-    // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
+    // Показване на админ бутон (само за администратор)
     const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; // Твоят UID!
     const adminBtn = document.getElementById('admin-panel-btn');
     if (adminBtn) {
@@ -2087,31 +2081,34 @@ window.deleteQuiz = async (id) => {
         window.showMessage("Урокът е изтрит.", "info");
     }
 };
+
+// =================================================
+// 👑 АДМИНИСТРАТОРСКИ ФУНКЦИИ
+// =================================================
+
 window.openAdminPanel = async function() {
-  try {
-    console.log('📊 openAdminPanel called');
-    console.log('auth.currentUser:', auth.currentUser);
-    console.log('functions object:', functions);
+    try {
+        console.log('📊 openAdminPanel called');
+        console.log('auth.currentUser:', auth.currentUser);
+        console.log('functions object:', functions);
 
-    if (!auth.currentUser) {
-      window.showMessage("❌ Не сте влезли. Моля, влезте отново.", "error");
-      return;
+        if (!auth.currentUser) {
+            window.showMessage("❌ Не сте влезли. Моля, влезте отново.", "error");
+            return;
+        }
+
+        const token = await auth.currentUser.getIdToken(true);
+        console.log('✅ Токен обновен:', token.substring(0, 20) + '...');
+
+        window.loadTeachersList();
+        
+    } catch (error) {
+        console.error("Admin panel error:", error);
+        window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
     }
-
-    const token = await auth.currentUser.getIdToken(true);
-    console.log('✅ Токен обновен:', token.substring(0, 20) + '...');
-
-    // 👇 ТОВА Е ПРОМЕНАТА – ВЕДНАГА ЗАРЕЖДАМЕ СПИСЪКА С УЧИТЕЛИ
-    window.loadTeachersList();
-    
-  } catch (error) {
-    console.error("Admin panel error:", error);
-    window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
-  }
 };
-// --- ЗАРЕЖДАНЕ НА СПИСЪК С УЧИТЕЛИ ---
+
 window.loadTeachersList = async function() {
-  try {
     console.log('👥 loadTeachersList called');
     
     const modal = document.getElementById('modal-teachers');
@@ -2120,62 +2117,73 @@ window.loadTeachersList = async function() {
     const errorDiv = document.getElementById('teachers-error');
     const tbody = document.getElementById('teachers-list-body');
 
-    // Показваме модала и лоудъра
+    if (!modal) {
+        console.error('❌ modal-teachers не съществува в DOM');
+        window.showMessage('❌ Грешка: модалният прозорец не е намерен', 'error');
+        return;
+    }
+
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-    loading.classList.remove('hidden');
-    tableContainer.classList.add('hidden');
-    errorDiv.classList.add('hidden');
+    if (loading) loading.classList.remove('hidden');
+    if (tableContainer) tableContainer.classList.add('hidden');
+    if (errorDiv) errorDiv.classList.add('hidden');
 
-    const getTeachersFunc = httpsCallable(functions, 'getTeachersList');
-    const result = await getTeachersFunc();
-    const teachers = result.data;
+    try {
+        console.log('📡 Извиквам getTeachersList...');
+        const getTeachersFunc = httpsCallable(functions, 'getTeachersList');
+        const result = await getTeachersFunc();
+        console.log('✅ Отговор от функцията:', result);
+        
+        const teachers = result.data;
+        console.log('👥 Брой учители:', teachers.length);
+        
+        if (!teachers || teachers.length === 0) {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-400">Няма регистрирани учители.</td></tr>';
+        } else {
+            if (tbody) {
+                tbody.innerHTML = teachers.map(t => `
+                    <tr class="border-b hover:bg-slate-50" data-uid="${t.uid}">
+                        <td class="py-3 px-4 font-bold">${t.name}</td>
+                        <td class="py-3 px-4">${t.email}</td>
+                        <td class="py-3 px-4">
+                            <span class="inline-block px-2 py-1 rounded-full text-[10px] font-black uppercase ${t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : t.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}">
+                                ${t.status === 'active' ? '✅ Активен' : t.status === 'pending' ? '⏳ Чакащ' : '❌ Деактивиран'}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-slate-500 text-sm">${t.registeredAt ? new Date(t.registeredAt * 1000).toLocaleDateString('bg-BG') : '—'}</td>
+                        <td class="py-3 px-4 text-center">
+                            ${t.status === 'pending' ? `<button onclick="window.approveTeacher('${t.uid}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-600 mr-2">✅ Одобри</button>` : ''}
+                            ${t.status === 'active' ? `<button onclick="window.suspendTeacher('${t.uid}')" class="bg-amber-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase hover:bg-amber-600">⏸️ Деактивирай</button>` : ''}
+                            ${t.status === 'suspended' ? `<button onclick="window.approveTeacher('${t.uid}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-600">✅ Активирай</button>` : ''}
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
 
-    if (!teachers || teachers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-400">Няма регистрирани учители.</td></tr>';
-    } else {
-      tbody.innerHTML = teachers.map(t => `
-        <tr class="border-b hover:bg-slate-50" data-uid="${t.uid}">
-          <td class="py-3 px-4 font-bold">${t.name}</td>
-          <td class="py-3 px-4">${t.email}</td>
-          <td class="py-3 px-4">
-            <span class="inline-block px-2 py-1 rounded-full text-[10px] font-black uppercase ${t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : t.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}">
-              ${t.status === 'active' ? '✅ Активен' : t.status === 'pending' ? '⏳ Чакащ' : '❌ Деактивиран'}
-            </span>
-          </td>
-          <td class="py-3 px-4 text-slate-500 text-sm">${t.registeredAt ? new Date(t.registeredAt * 1000).toLocaleDateString('bg-BG') : '—'}</td>
-          <td class="py-3 px-4 text-center">
-            ${t.status === 'pending' ? `<button onclick="window.approveTeacher('${t.uid}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-600 mr-2">✅ Одобри</button>` : ''}
-            ${t.status === 'active' ? `<button onclick="window.suspendTeacher('${t.uid}')" class="bg-amber-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase hover:bg-amber-600">⏸️ Деактивирай</button>` : ''}
-            ${t.status === 'suspended' ? `<button onclick="window.approveTeacher('${t.uid}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-600">✅ Активирай</button>` : ''}
-          </td>
-        </tr>
-      `).join('');
+        if (loading) loading.classList.add('hidden');
+        if (tableContainer) tableContainer.classList.remove('hidden');
+    } catch (error) {
+        console.error('❌ Грешка при зареждане на учители:', error);
+        if (loading) loading.classList.add('hidden');
+        if (errorDiv) {
+            errorDiv.classList.remove('hidden');
+            errorDiv.innerText = '❌ Грешка при зареждане на учителите.';
+        }
+        window.showMessage('❌ Грешка: ' + (error.message || 'Неизвестна грешка'), 'error');
     }
-
-    loading.classList.add('hidden');
-    tableContainer.classList.remove('hidden');
-  } catch (error) {
-    console.error('Error loading teachers:', error);
-    
-    const loading = document.getElementById('teachers-loading');
-    const errorDiv = document.getElementById('teachers-error');
-    if (loading) loading.classList.add('hidden');
-    if (errorDiv) {
-      errorDiv.classList.remove('hidden');
-      errorDiv.innerText = '❌ Грешка при зареждане на учителите.';
-    }
-  }
 };
 
-// --- ВРЕМЕННИ ФУНКЦИИ ЗА ОДОБРЕНИЕ/ДЕАКТИВИРАНЕ (ЩЕ ГИ НАПРАВИМ ПО-КЪСНО) ---
+// Временни функции за одобрение/деактивиране
 window.approveTeacher = async (uid) => {
-  window.showMessage(`✅ Функцията за одобрение е в процес на разработка. UID: ${uid}`, "info");
+    window.showMessage(`✅ Функцията за одобрение е в процес на разработка. UID: ${uid}`, "info");
 };
 
 window.suspendTeacher = async (uid) => {
-  window.showMessage(`⏸️ Функцията за деактивиране е в процес на разработка. UID: ${uid}`, "info");
+    window.showMessage(`⏸️ Функцията за деактивиране е в процес на разработка. UID: ${uid}`, "info");
 };
+
 // ----------------------------------------------------------------------
 // YT API
 // ----------------------------------------------------------------------
