@@ -428,12 +428,30 @@ window.saveImportedQuiz = async (data) => {
 window.loadMyQuizzes = async () => {
     if (!user) return;
 
+    const normalizeStoredQuizSafe = typeof normalizeStoredQuiz === 'function'
+        ? normalizeStoredQuiz
+        : (rawQuiz) => {
+            if (!rawQuiz || typeof rawQuiz !== 'object') return null;
+            const videoId = rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
+            const questionList = Array.isArray(rawQuiz.questions)
+                ? rawQuiz.questions
+                : (Array.isArray(rawQuiz.q) ? rawQuiz.q : []);
+            return {
+                ...rawQuiz,
+                id: rawQuiz.id,
+                title: rawQuiz.title || rawQuiz.name || 'Без име',
+                v: videoId,
+                questions: questionList,
+                q: questionList
+            };
+        };
+
     const snapshotsBySource = new Map();
     const rebuildAndRender = () => {
         const mergedByKey = new Map();
         snapshotsBySource.forEach((docs, sourceAppId) => {
             docs.forEach((quizDoc) => {
-                const normalized = normalizeStoredQuiz(quizDoc);
+                const normalized = normalizeStoredQuizSafe(quizDoc);
                 if (!normalized?.id) return;
                 mergedByKey.set(`${sourceAppId}:${normalized.id}`, normalized);
             });
