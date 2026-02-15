@@ -2327,15 +2327,13 @@ window.loadAdminDashboard = async function() {
         const isPermissionError = error?.code === 'permission-denied';
         const activeUid = user?.uid || 'unknown';
         const isAdminUid = isCurrentUserAdmin();
-        const permissionBodyMessage = isAdminUid
-            ? 'Няма админ достъп. Публикувайте Firestore правилата за admin UID.'
-            : 'Няма админ достъп. Влезте с admin UID, за да отворите админ панела.';
+        const permissionBodyMessage = 'Няма админ достъп. Публикувайте правилата и влезте с admin UID.';
         const permissionToastMessage = isAdminUid
             ? '❌ Липсва Firestore достъп за admin UID. Публикувайте правилата от Rules модала.'
             : '❌ Нямате админ права. Влезте с admin UID, за да отворите админ панела.';
 
         if (isPermissionError) {
-            console.info('Admin dashboard access denied.', { uid: activeUid, isAdminUid, code: error?.code });
+            console.warn('Admin dashboard blocked by Firestore rules or non-admin account:', { uid: activeUid, isAdminUid, code: error?.code });
             if (isAdminUid) {
                 window.showRulesHelpModal();
             }
