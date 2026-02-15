@@ -4,6 +4,10 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
+
+// Backward-compatible globals (за стари извиквания window.formatDate/window.formatTime)
+window.formatDate = formatDate;
+window.formatTime = formatTime;
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -1693,10 +1697,44 @@ window.finishSoloGame = async () => {
 };
 
 // --- EDITOR ENGINE ---
+const extractYouTubeVideoId = (input) => {
+    if (!input) return null;
+    const value = String(input).trim();
+
+    const directIdMatch = value.match(/^[a-zA-Z0-9_-]{11}$/);
+    if (directIdMatch) return directIdMatch[0];
+
+    try {
+        const parsed = new URL(value);
+        const host = parsed.hostname.replace(/^www\./, '');
+
+        if (host === 'youtu.be') {
+            const id = parsed.pathname.split('/').filter(Boolean)[0];
+            if (id && /^[a-zA-Z0-9_-]{11}$/.test(id)) return id;
+        }
+
+        if (host.endsWith('youtube.com')) {
+            const fromQuery = parsed.searchParams.get('v');
+            if (fromQuery && /^[a-zA-Z0-9_-]{11}$/.test(fromQuery)) return fromQuery;
+
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            const key = parts[0];
+            const candidate = parts[1];
+            if (["embed", "v", "shorts", "live"].includes(key) && candidate && /^[a-zA-Z0-9_-]{11}$/.test(candidate)) {
+                return candidate;
+            }
+        }
+    } catch (_) {
+        // not a full URL -> fallback regex below
+    }
+
+    return value.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/shorts\/|\/live\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1] || null;
+};
+
 window.loadEditorVideo = (isEdit = false) => {
     const url = document.getElementById('yt-url')?.value;
-    const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
-    if (!id) return window.showMessage("Невалиден линк.", "error");
+    const id = extractYouTubeVideoId(url);
+    if (!id) return window.showMessage("Невалиден YouTube линк или ID.", "error");
 
     if (!window.YT || !window.YT.Player) {
         window.showMessage("Изчакайте YouTube API...", "error");
