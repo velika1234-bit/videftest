@@ -2113,7 +2113,15 @@ window.openAdminPanel = async function() {
 window.loadTeachersList = async function() {
   try {
     console.log('👥 loadTeachersList called');
-    
+    console.log('📡 Извиквам getTeachersList...');
+    const getTeachersFunc = httpsCallable(functions, 'getTeachersList');
+    const result = await getTeachersFunc();
+    console.log('✅ Отговор от функцията:', result);
+    // ... останалия код
+  } catch (error) {
+    console.error('❌ Грешка при зареждане на учители:', error);
+  }
+};
     const modal = document.getElementById('modal-teachers');
     const loading = document.getElementById('teachers-loading');
     const tableContainer = document.getElementById('teachers-table-container');
