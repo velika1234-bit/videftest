@@ -421,7 +421,7 @@
                         <li>Отворете <a href="https://console.firebase.google.com/" target="_blank" class="text-indigo-600 underline">Firebase Console</a> и влезте във вашия проект.</li>
                         <li>Отидете на <strong>Build</strong> -> <strong>Firestore Database</strong>.</li>
                         <li>Кликнете на таба <strong>Rules</strong> (горе в средата).</li>
-                        <li>Уверете се, че сте влезли с <strong>admin</strong> акаунта (UID: <code class="font-mono">uNdGTBsgatZX4uOPTZqKG9qLJVZ2</code>).</li>
+                        <li>Уверете се, че сте влезли с <strong>admin</strong> акаунт (master UID или profile role/accessLevel = admin в current/legacy app scope).</li>
                         <li>Изтрийте всичко там и поставете този код:</li>
                     </ol>
                     
@@ -433,8 +433,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function hasAdminProfileIn(appId) {
+      return isSignedIn()
+             &amp;&amp; exists(/databases/$(database)/documents/artifacts/$(appId)/users/$(request.auth.uid)/settings/profile)
+             &amp;&amp; (
+               get(/databases/$(database)/documents/artifacts/$(appId)/users/$(request.auth.uid)/settings/profile).data.accessLevel == 'admin'
+               || get(/databases/$(database)/documents/artifacts/$(appId)/users/$(request.auth.uid)/settings/profile).data.role == 'admin'
+             );
+    }
+
+    function hasAdminProfile() {
+      return hasAdminProfileIn('videoquiz-ultimate-live') || hasAdminProfileIn('videoquiz-ultimate');
+    }
+
     function isAdmin() {
-      return isSignedIn() &amp;&amp; request.auth.uid == 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
+      return isSignedIn() &amp;&amp; (request.auth.uid == 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2' || hasAdminProfile());
     }
 
     match /artifacts/{appId} {
