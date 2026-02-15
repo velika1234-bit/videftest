@@ -1,9 +1,13 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
+
+// Backward-compatible globals (за стари извиквания window.formatDate/window.formatTime)
+window.formatDate = formatDate;
+window.formatTime = formatTime;
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -148,6 +152,14 @@ setTimeout(() => {
 
 initAuth();
 
+setTimeout(() => {
+    const anyVisible = Array.from(document.querySelectorAll('#app > div')).some(div => !div.classList.contains('hidden'));
+    if (!anyVisible) {
+        console.warn('No visible screen detected. Recovering to welcome screen.');
+        window.switchScreen('welcome');
+    }
+}, 1200);
+
 // --- HELPER FUNCTIONS ---
 window.resolveTeacherUidFromCode = async (decoded) => {
     if (!decoded) return null;
@@ -189,10 +201,35 @@ window.resolveTeacherUidFromCode = async (decoded) => {
 };
 
 
+
+const normalizeQuizPayload = (rawQuiz) => {
+    if (!rawQuiz || typeof rawQuiz !== 'object') return null;
+    const videoId = rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
+    const questionList = Array.isArray(rawQuiz.q)
+        ? rawQuiz.q
+        : (Array.isArray(rawQuiz.questions) ? rawQuiz.questions : []);
+
+    if (!videoId || questionList.length === 0) return null;
+
+    return {
+        ...rawQuiz,
+        v: videoId,
+        q: questionList,
+        questions: questionList,
+        title: rawQuiz.title || rawQuiz.name || 'Без име'
+    };
+};
+
 window.switchScreen = (name) => {
     document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
     const target = document.getElementById('screen-' + name);
-    if (target) target.classList.remove('hidden');
+    if (target) {
+        target.classList.remove('hidden');
+    } else {
+        const fallback = document.getElementById('screen-welcome');
+        fallback?.classList.remove('hidden');
+        console.warn(`Unknown screen: ${name}. Falling back to welcome.`);
+    }
 
     if (player) { try { player.destroy(); } catch(e) {} player = null; }
     if (solvePlayer) { try { solvePlayer.destroy(); } catch(e) {} solvePlayer = null; }
@@ -473,7 +510,7 @@ function renderSoloResults() {
         <tr class="border-b text-[10px] sm:text-xs hover:bg-slate-50">
             <td class="py-3 px-4 font-black text-slate-700">${r.studentName}</td>
             <td class="py-3 px-4 text-slate-500 truncate max-w-[120px]">${r.quizTitle}</td>
-            <td class="py-3 px-4 text-slate-400 font-mono">${window.formatDate(r.timestamp)}</td>
+            <td class="py-3 px-4 text-slate-400 font-mono">${formatDate(r.timestamp)}</td>
             <td class="py-3 px-4 text-right"><span class="bg-indigo-100 text-indigo-600 px-2 py-1 rounded-lg font-black">${r.score}</span></td>
             <td class="py-3 px-4 text-center">
                 <button onclick="window.deleteSoloResult('${r.id}')" class="text-rose-400 hover:text-rose-600 p-2 rounded-lg hover:bg-rose-50 transition-all" title="Изтрий резултат">
@@ -575,7 +612,7 @@ window.initHostPlayer = () => {
     document.getElementById('host-video-container').innerHTML = '<div id="host-video"></div>';
     hostPlayer = new YT.Player('host-video', {
         videoId: currentQuiz.v,
-        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1 },
+        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1, 'origin': window.location.origin },
         events: {
             'onReady': (event) => event.target.playVideo(),
             'onStateChange': async (e) => {
@@ -583,7 +620,7 @@ window.initHostPlayer = () => {
                     const i = setInterval(async () => {
                         if (!hostPlayer?.getCurrentTime) return;
                         const cur = Math.floor(hostPlayer.getCurrentTime());
-                        document.getElementById('host-timer').innerText = window.formatTime(cur);
+                        document.getElementById('host-timer').innerText = formatTime(cur);
                         const qIdx = currentQuiz.q.findIndex(q => Math.abs(q.time - cur) <= 1);
                         if (qIdx !== -1 && qIdx !== liveActiveQIdx) {
                             liveActiveQIdx = qIdx;
@@ -834,7 +871,7 @@ function getSoloResultsExportModel() {
             idx: idx + 1,
             studentName: r.studentName || '-',
             quizTitle: r.quizTitle || '-',
-            dateTime: window.formatDate(r.timestamp),
+            dateTime: formatDate(r.timestamp),
             scoreLabel: r.score || '-',
             score: parsed.score,
             total: parsed.total,
@@ -1410,7 +1447,9 @@ window.startIndividual = async () => {
     sopModeEnabled = !!document.getElementById('ind-sop-mode')?.checked;
     const name = isDiscussionMode ? "Обсъждане" : prompt("Вашето име:");
     if (!name) return;
-    studentNameValue = name; currentQuiz = decoded;
+    const normalizedQuiz = normalizeQuizPayload(decoded);
+    if (!normalizedQuiz) return window.showMessage("Кодът е невалиден или непълен (липсва видео/въпроси).", 'error');
+    studentNameValue = name; currentQuiz = normalizedQuiz;
     currentQuizOwnerId = await window.resolveTeacherUidFromCode(decoded);
     if (!currentQuizOwnerId) {
         return window.showMessage("Кодът не е свързан еднозначно с учител. Генерирайте нов код от профила на учителя.", 'error');
@@ -1436,7 +1475,7 @@ window.initSolvePlayer = () => {
     document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
     solvePlayer = new YT.Player('solve-player', {
         videoId: currentQuiz.v, width: '100%', height: '100%',
-        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1 },
+        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1, 'origin': window.location.origin },
         events: { 'onStateChange': (e) => {
             if (e.data === YT.PlayerState.ENDED) {
                 window.finishSoloGame();
@@ -1693,10 +1732,44 @@ window.finishSoloGame = async () => {
 };
 
 // --- EDITOR ENGINE ---
+const extractYouTubeVideoId = (input) => {
+    if (!input) return null;
+    const value = String(input).trim();
+
+    const directIdMatch = value.match(/^[a-zA-Z0-9_-]{11}$/);
+    if (directIdMatch) return directIdMatch[0];
+
+    try {
+        const parsed = new URL(value);
+        const host = parsed.hostname.replace(/^www\./, '');
+
+        if (host === 'youtu.be') {
+            const id = parsed.pathname.split('/').filter(Boolean)[0];
+            if (id && /^[a-zA-Z0-9_-]{11}$/.test(id)) return id;
+        }
+
+        if (host.endsWith('youtube.com')) {
+            const fromQuery = parsed.searchParams.get('v');
+            if (fromQuery && /^[a-zA-Z0-9_-]{11}$/.test(fromQuery)) return fromQuery;
+
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            const key = parts[0];
+            const candidate = parts[1];
+            if (["embed", "v", "shorts", "live"].includes(key) && candidate && /^[a-zA-Z0-9_-]{11}$/.test(candidate)) {
+                return candidate;
+            }
+        }
+    } catch (_) {
+        // not a full URL -> fallback regex below
+    }
+
+    return value.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/shorts\/|\/live\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1] || null;
+};
+
 window.loadEditorVideo = (isEdit = false) => {
     const url = document.getElementById('yt-url')?.value;
-    const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
-    if (!id) return window.showMessage("Невалиден линк.", "error");
+    const id = extractYouTubeVideoId(url);
+    if (!id) return window.showMessage("Невалиден YouTube линк или ID.", "error");
 
     if (!window.YT || !window.YT.Player) {
         window.showMessage("Изчакайте YouTube API...", "error");
@@ -1707,8 +1780,8 @@ window.loadEditorVideo = (isEdit = false) => {
     currentVideoId = id;
     document.getElementById('editor-view').classList.remove('hidden');
     document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
-    player = new YT.Player('player', { videoId: id, events: { 'onReady': () => {
-        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
+    player = new YT.Player('player', { videoId: id, playerVars: { 'origin': window.location.origin, 'playsinline': 1, 'rel': 0 }, events: { 'onReady': () => {
+        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = formatTime(player.getCurrentTime()); }, 500);
         activeIntervals.push(i);
     }}});
     if (!isEdit) { questions = []; editingQuizId = null; }
@@ -1722,7 +1795,7 @@ window.openQuestionModal = () => {
     document.getElementById('m-text').value = '';
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
-    document.getElementById('m-time').innerText = window.formatTime(player.getCurrentTime());
+    document.getElementById('m-time').innerText = formatTime(player.getCurrentTime());
     window.updateModalFields();
 };
 
@@ -1853,7 +1926,7 @@ window.editQuestionContent = (index) => {
     document.getElementById('m-text').value = q.text;
     document.getElementById('m-type').value = q.type;
     document.getElementById('m-points').value = q.points || 1;
-    document.getElementById('m-time').innerText = window.formatTime(q.time);
+    document.getElementById('m-time').innerText = formatTime(q.time);
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
     window.updateModalFields();
@@ -1894,7 +1967,7 @@ function renderEditorList() {
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-1">
                     <button onclick="window.adjustTime(${i}, -1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">-</button>
-                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${window.formatTime(q.time)}</span>
+                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${formatTime(q.time)}</span>
                     <button onclick="window.adjustTime(${i}, 1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">+</button>
                 </div>
                 <div class="flex gap-1">
