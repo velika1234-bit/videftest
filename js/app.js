@@ -2327,6 +2327,12 @@ window.loadAdminDashboard = async function() {
         const isPermissionError = error?.code === 'permission-denied';
         const activeUid = user?.uid || 'unknown';
         const isAdminUid = isCurrentUserAdmin();
+        const permissionBodyMessage = isAdminUid
+            ? 'Няма админ достъп. Публикувайте Firestore правилата за admin UID.'
+            : 'Няма админ достъп. Влезте с admin UID, за да отворите админ панела.';
+        const permissionToastMessage = isAdminUid
+            ? '❌ Липсва Firestore достъп за admin UID. Публикувайте правилата от Rules модала.'
+            : '❌ Нямате админ права. Влезте с admin UID, за да отворите админ панела.';
 
         if (isPermissionError) {
             console.info('Admin dashboard access denied.', { uid: activeUid, isAdminUid, code: error?.code });
@@ -2340,17 +2346,10 @@ window.loadAdminDashboard = async function() {
         const body = document.getElementById('admin-teachers-body');
         if (body) {
             body.innerHTML = isPermissionError
-                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп. Влезте с admin UID и публикувайте Firestore rules.</td></tr>'
+                ? `<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">${permissionBodyMessage}</td></tr>`
                 : '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
         }
-        window.showMessage(
-            isPermissionError
-                ? (isAdminUid
-                    ? '❌ Липсва Firestore достъп за admin UID. Публикувайте правилата от Rules модала.'
-                    : '❌ Нямате админ права. Влезте с admin UID, за да отворите админ панела.')
-                : '❌ Неуспешно зареждане на админ данни.',
-            'error'
-        );
+        window.showMessage(isPermissionError ? permissionToastMessage : '❌ Неуспешно зареждане на админ данни.', 'error');
     } finally {
         setAdminLoading(false);
     }
