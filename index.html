@@ -345,6 +345,48 @@
                 <button onclick="document.getElementById('modal-rules-help').classList.add('hidden')" class="absolute top-8 right-8 text-slate-400 hover:text-slate-600">
                     <i data-lucide="x" class="w-8 h-8"></i>
                 </button>
+                        
+        <!-- 👇 ТУК ДОБАВЯМЕ НОВИЯ МОДАЛ ЗА УЧИТЕЛИ -->
+        <!-- Модал за списък с учители -->
+        <div id="modal-teachers" class="fixed inset-0 bg-slate-900/95 backdrop-blur-xl hidden items-center justify-center p-4 z-[2500]">
+            <div class="bg-white w-full max-w-4xl rounded-[3rem] p-8 shadow-2xl animate-pop max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-black text-slate-900">👥 Управление на учители</h2>
+                    <button onclick="document.getElementById('modal-teachers').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                        <i data-lucide="x" class="w-8 h-8"></i>
+                    </button>
+                </div>
+
+                <div id="teachers-loading" class="text-center py-8">
+                    <div class="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <p class="mt-4 text-slate-500">Зареждане на учителите...</p>
+                </div>
+
+                <div id="teachers-table-container" class="hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 font-black text-[10px] uppercase text-slate-400 border-b sticky top-0">
+                            <tr>
+                                <th class="py-4 px-4">Име</th>
+                                <th class="py-4 px-4">Имейл</th>
+                                <th class="py-4 px-4">Статус</th>
+                                <th class="py-4 px-4">Регистрация</th>
+                                <th class="py-4 px-4 text-center">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teachers-list-body"></tbody>
+                    </table>
+                </div>
+
+                <div id="teachers-error" class="hidden text-center py-8 text-rose-500 font-bold"></div>
+            </div>
+        </div>
+
+    </div> <!-- 👈 Това затваря main app div -->
+
+    <!-- Модул с цялата логика -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
 
                 <div class="text-center space-y-2">
                     <div class="w-20 h-20 bg-rose-100 text-rose-500 rounded-3xl flex items-center justify-center mx-auto text-4xl mb-4 animate-bounce">⚠️</div>
