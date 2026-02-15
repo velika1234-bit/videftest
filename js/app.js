@@ -88,12 +88,14 @@ const safeSetHTML = (id, html) => {
 
 const resolveAccessLevel = (profile = {}, uid = null) => {
     if (uid && uid === ADMIN_UID) return 'admin';
+    if (!profile || Object.keys(profile).length === 0) return null;
     const level = String(profile?.accessLevel || '').toLowerCase();
     if (level === 'admin' || level === 'teacher' || level === 'tester') return level;
     const role = String(profile?.role || '').toLowerCase();
     if (role === 'admin') return 'admin';
     if (role === 'teacher') return 'teacher';
-    return 'tester';
+    if (role === 'tester') return 'tester';
+    return null;
 };
 
 const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.tester;
@@ -164,7 +166,7 @@ if (adminBtn) {
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
         try {
             const profileSnap = await getDoc(profileRef);
-            const profileData = profileSnap.exists() ? profileSnap.data() : {};
+            const profileData = profileSnap.exists() ? profileSnap.data() : null;
             currentAccessLevel = resolveAccessLevel(profileData, incomingUid);
             isTeacher = currentAccessLevel === 'teacher' || currentAccessLevel === 'admin' || currentAccessLevel === 'tester';
 
@@ -175,7 +177,7 @@ if (adminBtn) {
                 if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
                     window.switchScreen('teacher-dashboard');
                 }
-            } else if (!isAnon) {
+            } else {
                 window.switchScreen('welcome');
             }
         } catch (e) {
