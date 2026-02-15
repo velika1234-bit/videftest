@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // UID на администраторския профил
+    function isAdmin() {
+      return isSignedIn() && request.auth.uid == 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
+    }
+
+    // Правила за current + legacy scope
+    match /artifacts/{appId} {
+      allow read, write: if false;
+
+      match /public/data/{document=**} {
+        // Публична част (join/live flow)
+        allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
+      }
+
+      match /users/{userId}/{document=**} {
+        // Всеки учител вижда/редактира само своята папка.
+        // Админът има достъп до всички учители (нужно за admin panel статистики).
+        allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate']
+                           && isSignedIn()
+                           && (request.auth.uid == userId || isAdmin());
+      }
+
+      match /users/{teacherId}/solo_results/{resultId} {
+        // Ученици (вкл. анонимни логнати) записват соло резултати.
+        allow create: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'] && isSignedIn();
+
+        // Учителят собственик или админ може да чете/трие/редактира.
+        allow read, update, delete: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate']
+                                    && isSignedIn()
+                                    && (request.auth.uid == teacherId || isAdmin());
+      }
+    }
+  }
+}

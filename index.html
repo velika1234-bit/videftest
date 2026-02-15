@@ -427,24 +427,32 @@
                         <pre class="bg-slate-900 text-slate-300 p-6 rounded-2xl font-mono text-xs overflow-x-auto select-all">rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Основен път на приложението
-    match /artifacts/videoquiz-ultimate-live {
-      
-      // 1. ПУБЛИЧНИ ДАННИ (Сесии на живо)
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &amp;&amp; request.auth.uid == 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
+    }
+
+    match /artifacts/{appId} {
+      allow read, write: if false;
+
       match /public/data/{document=**} {
-        allow read, write: if true;
+        allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
       }
 
-      // 2. ДАННИ НА УЧИТЕЛЯ (Лична папка)
-      // Учителят има пълен контрол над всичко в своята папка
       match /users/{userId}/{document=**} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate']
+                           &amp;&amp; isSignedIn()
+                           &amp;&amp; (request.auth.uid == userId || isAdmin());
       }
-      
-      // 3. ИЗКЛЮЧЕНИЕ ЗА РЕЗУЛТАТИ (Индивидуален режим)
-      // Позволяваме на учениците (всеки логнат, вкл. анонимно) да ЗАПИСВА резултат
+
       match /users/{teacherId}/solo_results/{resultId} {
-         allow create: if request.auth != null;
+        allow create: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'] &amp;&amp; isSignedIn();
+        allow read, update, delete: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate']
+                                    &amp;&amp; isSignedIn()
+                                    &amp;&amp; (request.auth.uid == teacherId || isAdmin());
       }
     }
   }
