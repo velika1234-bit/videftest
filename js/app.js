@@ -220,24 +220,6 @@ const normalizeQuizPayload = (rawQuiz) => {
         questions: questionList,
         title: rawQuiz.title || rawQuiz.name || 'Без име'
     };
-
-};
-
-const normalizeStoredQuiz = (rawQuiz) => {
-    if (!rawQuiz || typeof rawQuiz !== 'object') return null;
-    const normalized = normalizeQuizPayload(rawQuiz);
-    const videoId = normalized?.v || rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
-    const questionList = normalized?.q
-        || (Array.isArray(rawQuiz.questions) ? rawQuiz.questions : (Array.isArray(rawQuiz.q) ? rawQuiz.q : []));
-
-    return {
-        ...rawQuiz,
-        id: rawQuiz.id,
-        title: normalized?.title || rawQuiz.title || rawQuiz.name || 'Без име',
-        v: videoId,
-        questions: questionList,
-        q: questionList
-    };
 };
 
 window.switchScreen = (name) => {
