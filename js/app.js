@@ -80,6 +80,7 @@ const safeSetHTML = (id, html) => {
 onAuthStateChanged(auth, async (u) => {
     const incomingUid = u?.uid || null;
     
+    // Актуализиране на UI за текущия потребител (за дебъгване)
     const userEmailDisplay = document.getElementById('user-email-display');
     if (userEmailDisplay) {
         userEmailDisplay.innerText = u ? (u.email || "Анонимен") : "";
@@ -88,9 +89,11 @@ onAuthStateChanged(auth, async (u) => {
     if (lastAuthUid !== incomingUid) {
         myQuizzes = [];
         soloResults = [];
+        // Ако потребителят се е сменил, преначертаваме веднага, за да изчистим старото инфо
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
 
+        // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
         const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
         const adminBtn = document.getElementById('admin-panel-btn');
         if (adminBtn) {
@@ -364,7 +367,7 @@ window.submitImport = () => {
     const code = document.getElementById('import-code-input').value;
     if (!code) return window.showMessage("Моля поставете код.", "error");
 
-    const decoded = window.decodeQuizCode(code);
+    const decoded = decodeQuizCode(code);
     if (!decoded || (!decoded.v || (!decoded.q && !decoded.questions))) {
         return window.showMessage("Кодът е невалиден.", "error");
     }
@@ -491,7 +494,7 @@ function renderSoloResults() {
         // Проверка за липсващи данни
         const sName = r.studentName || 'Анонимен';
         const qTitle = r.quizTitle || 'Без име';
-        const dateStr = r.timestamp ? window.formatDate(r.timestamp) : 'Няма дата';
+        const dateStr = r.timestamp ? formatDate(r.timestamp) : 'Няма дата';
         const scoreStr = r.score || '0/0';
         
         return `
@@ -634,7 +637,7 @@ window.initHostPlayer = () => {
                     const i = setInterval(async () => {
                         if (!hostPlayer?.getCurrentTime) return;
                         const cur = Math.floor(hostPlayer.getCurrentTime());
-                        document.getElementById('host-timer').innerText = window.formatTime(cur);
+                        document.getElementById('host-timer').innerText = formatTime(cur);
                         const qIdx = currentQuiz.q.findIndex(q => Math.abs(q.time - cur) <= 1);
                         if (qIdx !== -1 && qIdx !== liveActiveQIdx) {
                             liveActiveQIdx = qIdx;
@@ -1512,7 +1515,7 @@ window.startIndividual = async () => {
     // 2. Безопасно декодиране
     let decoded = null;
     try {
-        decoded = window.decodeQuizCode(pinCode);
+        decoded = decodeQuizCode(pinCode);
     } catch (decodeErr) {
         console.error(decodeErr);
         return window.showMessage("Невалиден формат на кода (грешка при декодиране).", 'error');
@@ -1862,7 +1865,7 @@ window.loadEditorVideo = (isEdit = false) => {
     player = new YT.Player('player', {
         videoId: id, events: {
             'onReady': () => {
-                const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
+                const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = formatTime(player.getCurrentTime()); }, 500);
                 activeIntervals.push(i);
             }
         }
@@ -1878,7 +1881,7 @@ window.openQuestionModal = () => {
     document.getElementById('m-text').value = '';
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
-    document.getElementById('m-time').innerText = window.formatTime(player.getCurrentTime());
+    document.getElementById('m-time').innerText = formatTime(player.getCurrentTime());
     window.updateModalFields();
 };
 
@@ -2009,7 +2012,7 @@ window.editQuestionContent = (index) => {
     document.getElementById('m-text').value = q.text;
     document.getElementById('m-type').value = q.type;
     document.getElementById('m-points').value = q.points || 1;
-    document.getElementById('m-time').innerText = window.formatTime(q.time);
+    document.getElementById('m-time').innerText = formatTime(q.time);
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
     window.updateModalFields();
@@ -2050,7 +2053,7 @@ function renderEditorList() {
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-1">
                     <button onclick="window.adjustTime(${i}, -1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">-</button>
-                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${window.formatTime(q.time)}</span>
+                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${formatTime(q.time)}</span>
                     <button onclick="window.adjustTime(${i}, 1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">+</button>
                 </div>
                 <div class="flex gap-1">
