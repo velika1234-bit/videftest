@@ -79,9 +79,17 @@ const safeSetHTML = (id, html) => {
 // --- AUTH LOGIC ---
 onAuthStateChanged(auth, async (u) => {
     const incomingUid = u?.uid || null;
+    
+    // Актуализиране на UI за текущия потребител (за дебъгване)
+    const userEmailDisplay = document.getElementById('user-email-display');
+    if (userEmailDisplay) {
+        userEmailDisplay.innerText = u ? (u.email || "Анонимен") : "";
+    }
+
     if (lastAuthUid !== incomingUid) {
         myQuizzes = [];
         soloResults = [];
+        // Ако потребителят се е сменил, преначертаваме веднага, за да изчистим старото инфо
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
 
@@ -89,13 +97,14 @@ onAuthStateChanged(auth, async (u) => {
         const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
         const adminBtn = document.getElementById('admin-panel-btn');
         if (adminBtn) {
-            if (user && user.uid === ADMIN_UID) {
+            if (u && u.uid === ADMIN_UID) {
                 adminBtn.classList.remove('hidden');
             } else {
                 adminBtn.classList.add('hidden');
             }
         }
     }
+    
     lastAuthUid = incomingUid;
     user = u;
     document.getElementById('auth-loader')?.classList.add('hidden');
@@ -981,7 +990,7 @@ window.exportPDF = async () => {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
 
-    // Function to load font
+    // Function to load font - ФИКС ЗА КИРИЛИЦА
     const loadFont = async () => {
         try {
             // Using a reliable CDN for Roboto Regular which supports Cyrillic
@@ -1836,7 +1845,7 @@ window.editQuestionContent = (index) => {
     } else if (q.type === 'open') {
         const openCorrect = document.getElementById('m-open-correct');
         if (openCorrect) openCorrect.value = q.correct || '';
-    } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
+    } else if (q.type === 'numeric' || type === 'timeline-slider') {
         const minInput = document.getElementById('m-numeric-min');
         const maxInput = document.getElementById('m-numeric-max');
         const stepInput = document.getElementById('m-numeric-step');
