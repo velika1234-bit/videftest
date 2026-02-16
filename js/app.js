@@ -2242,6 +2242,14 @@ const setAdminLoading = (isLoading) => {
     }
 };
 
+
+const getAdminPermissionCopy = (hasAdminAccess) => ({
+    tableMessage: 'Няма админ достъп. Влезте с admin акаунт; ако сте admin, публикувайте Firestore правилата.',
+    toastMessage: hasAdminAccess
+        ? '❌ Няма админ достъп: публикувайте правилата. Отворен е Rules модал.'
+        : '❌ Няма админ достъп: влезте с admin акаунт.'
+});
+
 const renderAdminStats = (rows = []) => {
     const totals = rows.reduce((acc, row) => {
         acc.lessons += row.lessons;
@@ -2339,16 +2347,15 @@ window.loadAdminDashboard = async function() {
         }
 
         const body = document.getElementById('admin-teachers-body');
+        const permissionCopy = getAdminPermissionCopy(hasAdminAccess);
         if (body) {
             body.innerHTML = isPermissionError
-                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп. Влезте с admin акаунт; ако сте admin, публикувайте Firestore правилата.</td></tr>'
+                ? `<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">${permissionCopy.tableMessage}</td></tr>`
                 : '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
         }
         window.showMessage(
             isPermissionError
-                ? (hasAdminAccess
-                    ? '❌ Няма админ достъп: публикувайте правилата. Отворен е Rules модал.'
-                    : '❌ Няма админ достъп: влезте с admin акаунт.')
+                ? permissionCopy.toastMessage
                 : '❌ Неуспешно зареждане на админ данни.',
             'error'
         );
