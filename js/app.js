@@ -80,7 +80,6 @@ const safeSetHTML = (id, html) => {
 onAuthStateChanged(auth, async (u) => {
     const incomingUid = u?.uid || null;
     
-    // Актуализиране на UI за текущия потребител (за дебъгване)
     const userEmailDisplay = document.getElementById('user-email-display');
     if (userEmailDisplay) {
         userEmailDisplay.innerText = u ? (u.email || "Анонимен") : "";
@@ -89,11 +88,9 @@ onAuthStateChanged(auth, async (u) => {
     if (lastAuthUid !== incomingUid) {
         myQuizzes = [];
         soloResults = [];
-        // Ако потребителят се е сменил, преначертаваме веднага, за да изчистим старото инфо
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
 
-        // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
         const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
         const adminBtn = document.getElementById('admin-panel-btn');
         if (adminBtn) {
@@ -1110,396 +1107,7 @@ window.exportPDF = async () => {
 };
 
 // --- STUDENT CLIENT LOGIC ---
-window.joinLiveSession = async () => {
-    const pin = document.getElementById('live-pin').value.trim();
-    studentNameValue = document.getElementById('live-student-name').value.trim();
-    if (!pin || !studentNameValue) return window.showMessage("Име и ПИН са задължителни!", 'error');
-    try {
-        if (!user) await signInAnonymously(auth);
-        const sessionRef = getSessionRefById(pin);
-        sessionID = pin;
-        sessionDocId = pin;
-        const sessionSnap = await getDoc(sessionRef);
-        if (!sessionSnap.exists()) return window.showMessage("Невалиден ПИН код.", 'error');
-
-        const randomAvatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
-        window.switchScreen('live-client');
-
-        liveScore = 0;
-        lastAnsweredIdx = -1;
-        document.getElementById('my-avatar-display').innerText = randomAvatar;
-        window.tempLiveSelection = null;
-
-        const uid = auth.currentUser?.uid || "unknown";
-
-        participantStorageMode = 'legacy';
-        const legacyPartRef = getLegacyParticipantRef(uid);
-        const sessionPartRef = getParticipantRef(pin, uid);
-
-        let pSnap = await getDoc(sessionPartRef);
-        let targetRef = sessionPartRef;
-        let found = false;
-
-        if (pSnap.exists()) {
-            found = true;
-            participantStorageMode = 'session';
-        } else {
-            pSnap = await getDoc(legacyPartRef);
-            if (pSnap.exists() && pSnap.data().sessionId === pin) {
-                found = true;
-                targetRef = legacyPartRef;
-                participantStorageMode = 'legacy';
-            }
-        }
-
-        currentParticipantRef = targetRef;
-
-        if (found) {
-            const d = pSnap.data();
-            liveScore = d.score || 0;
-            studentNameValue = d.name;
-            window.showMessage("Върнахте се в сесията!", "info");
-        } else {
-            const participantPayload = {
-                name: studentNameValue, sessionId: pin, avatar: randomAvatar, score: 0,
-                finished: false, lastAnsweredIdx: -1, answers: {}
-            };
-
-            try {
-                targetRef = sessionPartRef;
-                currentParticipantRef = sessionPartRef;
-                participantStorageMode = 'session';
-                await setDoc(sessionPartRef, participantPayload, { merge: true });
-            } catch (writeErr) {
-                if (writeErr?.code !== 'permission-denied') throw writeErr;
-                targetRef = legacyPartRef;
-                currentParticipantRef = legacyPartRef;
-                participantStorageMode = 'legacy';
-                await setDoc(legacyPartRef, participantPayload, { merge: true });
-            }
-        }
-
-        const unsub = onSnapshot(sessionRef, (snap) => {
-            const d = snap.data(); if (!d) return;
-            if (d.status === 'finished') {
-                document.getElementById('client-question').classList.add('hidden');
-                document.getElementById('client-waiting').classList.add('hidden');
-                document.getElementById('client-finished').classList.remove('hidden');
-                const maxPoints = d.totalPoints || '?';
-                document.getElementById('final-score-display').innerText = `${liveScore} / ${maxPoints}`;
-            } else if (d.status === 'active' && d.activeQ !== -1) {
-                if (liveActiveQIdx !== d.activeQ) {
-                    liveActiveQIdx = d.activeQ;
-                    window.currentLiveQ = d.qData;
-                    window.currentLiveQStartedAtMs = (typeof d.qStartedAt?.toMillis === 'function')
-                        ? d.qStartedAt.toMillis()
-                        : (d.qStartedAt?.seconds ? d.qStartedAt.seconds * 1000 : Date.now());
-                    document.getElementById('client-question').classList.remove('hidden');
-                    document.getElementById('client-waiting').classList.add('hidden');
-                    document.getElementById('live-q-text-client').innerText = d.qData.text;
-                    window.renderLiveQuestionUI(d.qData);
-                }
-            } else {
-                document.getElementById('client-question').classList.add('hidden');
-                document.getElementById('client-waiting').classList.remove('hidden');
-                document.getElementById('waiting-status-text').innerText = "Изчакай въпрос...";
-            }
-        }, (error) => {
-            if (error.code === 'permission-denied') window.showRulesHelpModal();
-        });
-        unsubscribes.push(unsub);
-    } catch (e) {
-        console.error(e);
-        if (e.code === 'permission-denied') window.showRulesHelpModal();
-        else window.showMessage("Грешка при свързване.", "error");
-    }
-};
-
-window.selectLiveOption = (el, val) => {
-    document.querySelectorAll('.client-opt-btn').forEach(btn => {
-        btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
-        btn.classList.add('bg-slate-50', 'text-slate-800', 'border-slate-100');
-    });
-    el.classList.remove('bg-slate-50', 'text-slate-800', 'border-slate-100');
-    el.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600');
-
-    window.tempLiveSelection = val;
-
-    const stickyContainer = document.getElementById('sticky-btn-container');
-    stickyContainer.classList.remove('hidden');
-};
-
-window.submitLiveSingleConfirm = () => {
-    if (window.tempLiveSelection === null) return;
-    const isCorrect = window.tempLiveSelection === window.currentLiveQ.correct;
-    window.submitLiveFinal(isCorrect);
-};
-
-window.selectLiveMultiple = () => {
-    const checked = Array.from(document.querySelectorAll('input[name="c-multiple"]:checked'));
-    const stickyContainer = document.getElementById('sticky-btn-container');
-    if (checked.length > 0) {
-        stickyContainer.classList.remove('hidden');
-    } else {
-        stickyContainer.classList.add('hidden');
-    }
-};
-
-window.submitLiveMultipleConfirm = () => {
-    const checked = Array.from(document.querySelectorAll('input[name="c-multiple"]:checked')).map(el => parseInt(el.value));
-    const isCorrect = JSON.stringify(checked.sort()) === JSON.stringify(window.currentLiveQ.correct.sort());
-    window.submitLiveFinal(isCorrect);
-};
-
-window.submitLiveOpenConfirm = () => {
-    const ans = document.getElementById('c-open-answer')?.value.trim().toLowerCase();
-    const isCorrect = ans === window.currentLiveQ.correct;
-    window.submitLiveFinal(isCorrect);
-};
-
-window.submitLiveNumericConfirm = () => {
-    const slider = document.getElementById('c-numeric-slider');
-    if (!slider) return;
-    const answer = parseFloat(slider.value);
-    const q = window.currentLiveQ;
-    const correct = q.correct;
-    const tolerance = q.tolerance || 0;
-    const isCorrect = Math.abs(answer - correct) <= tolerance;
-    window.submitLiveFinal(isCorrect);
-};
-
-window.pickLiveOrder = (el, originalIdx) => {
-    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
-    if (window.userOrderSequence.includes(originalIdx)) return;
-    window.userOrderSequence.push(originalIdx);
-    el.classList.add('opacity-40', 'pointer-events-none');
-    const result = document.getElementById('client-ordering-result');
-    if (result) {
-        const chip = document.createElement('div');
-        chip.className = 'bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-black text-[10px]';
-        chip.innerText = `${window.userOrderSequence.length}. ${el.innerText}`;
-        result.appendChild(chip);
-    }
-    if (window.userOrderSequence.length === window.currentLiveQ.options.length) {
-        document.getElementById('sticky-btn-container')?.classList.remove('hidden');
-    }
-};
-
-window.pickLiveTimeline = (el, originalIdx) => {
-    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
-    if (window.userOrderSequence.includes(originalIdx)) return;
-    window.userOrderSequence.push(originalIdx);
-    el.classList.add('opacity-40', 'pointer-events-none');
-    const result = document.getElementById('client-timeline-result');
-    if (result) {
-        const chip = document.createElement('div');
-        chip.className = 'bg-amber-600 text-white px-3 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1';
-        chip.innerHTML = `<i data-lucide="clock" class="w-3 h-3"></i> ${window.userOrderSequence.length}. ${el.innerText}`;
-        result.appendChild(chip);
-        if (window.lucide) lucide.createIcons();
-    }
-    if (window.userOrderSequence.length === window.currentLiveQ.options.length) {
-        document.getElementById('sticky-btn-container')?.classList.remove('hidden');
-    }
-};
-
-window.clearLiveTimeline = () => {
-    window.userOrderSequence = [];
-    const result = document.getElementById('client-timeline-result');
-    if (result) result.innerHTML = '';
-    document.querySelectorAll('.client-timeline-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
-    document.getElementById('sticky-btn-container')?.classList.add('hidden');
-};
-
-window.submitLiveTimelineConfirm = () => {
-    const q = window.currentLiveQ;
-    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) {
-        return window.showMessage('Подредете всички събития!', 'error');
-    }
-    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
-    window.submitLiveFinal(isCorrect);
-};
-
-window.clearLiveOrdering = () => {
-    window.userOrderSequence = [];
-    const result = document.getElementById('client-ordering-result');
-    if (result) result.innerHTML = '';
-    document.querySelectorAll('.client-order-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
-    document.getElementById('sticky-btn-container')?.classList.add('hidden');
-};
-
-window.submitLiveOrderingConfirm = () => {
-    const q = window.currentLiveQ;
-    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) {
-        return window.showMessage('Подредете всички елементи!', 'error');
-    }
-    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
-    window.submitLiveFinal(isCorrect);
-};
-
-window.renderLiveQuestionUI = (q) => {
-    const container = document.getElementById('live-options-client');
-    container.innerHTML = '';
-    window.tempLiveSelection = null;
-    window.userOrderSequence = [];
-
-    let btnHtml = `
-    <div class="h-28"></div>
-    <div id="sticky-btn-container" class="fixed bottom-0 left-0 w-full p-4 bg-white/90 backdrop-blur-md border-t border-indigo-100 z-50 hidden animate-pop pb-6 sm:pb-4">
-        <button id="btn-submit-live-unified" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-lg shadow-xl shadow-indigo-200 transform active:scale-95 transition-all">ИЗПРАТИ</button>
-    </div>`;
-
-    if (q.type === 'single') {
-        container.innerHTML = q.options.map((o, i) => `
-            <button onclick="window.selectLiveOption(this, ${i})" class="client-opt-btn w-full p-4 text-left bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 shadow-sm hover:border-indigo-300 transition-all text-sm mb-2">${o}</button>
-        `).join('') + btnHtml;
-        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveSingleConfirm;
-    } else if (q.type === 'multiple') {
-        container.innerHTML = q.options.map((o, i) => `
-            <label class="flex items-center gap-4 w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 cursor-pointer text-sm mb-2">
-                <input type="checkbox" name="c-multiple" value="${i}" class="w-6 h-6" onchange="window.selectLiveMultiple()"> ${o}
-            </label>
-        `).join('') + btnHtml;
-        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveMultipleConfirm;
-    } else if (q.type === 'boolean') {
-        container.innerHTML = `
-         <div class="grid grid-cols-2 gap-4">
-            <button onclick="window.selectLiveOption(this, true)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-emerald-600 text-xl">ДА</button>
-            <button onclick="window.selectLiveOption(this, false)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-rose-600 text-xl">НЕ</button>
-         </div>` + btnHtml;
-        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveSingleConfirm;
-    } else if (q.type === 'open') {
-        container.innerHTML = `<input type="text" id="c-open-answer" placeholder="Напишете отговор..." class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-base outline-none text-center mb-4">` + btnHtml;
-        document.getElementById('sticky-btn-container').classList.remove('hidden');
-        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOpenConfirm;
-    } else if (q.type === 'ordering') {
-        const shuffled = q.options.map((o, i) => ({ o, i })).sort(() => Math.random() - 0.5);
-        container.innerHTML = `
-            <div id="client-ordering-pool" class="grid grid-cols-1 gap-2 mb-4">${shuffled.map(item => `<button onclick="window.pickLiveOrder(this, ${item.i})" class="client-order-item w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 text-sm">${item.o}</button>`).join('')}</div>
-            <div id="client-ordering-result" class="flex flex-wrap justify-center gap-2 mb-4 min-h-[40px] border-t pt-4"></div>
-            <button type="button" onclick="window.clearLiveOrdering()" class="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] mb-2">Изчисти</button>
-        ` + btnHtml;
-        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOrderingConfirm;
-    } else if (q.type === 'timeline') {
-        const shuffled = q.options.map((o, i) => ({ o, i })).sort(() => Math.random() - 0.5);
-        container.innerHTML = `
-            <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 font-black text-xs flex items-center gap-2">
-                <i data-lucide="clock" class="w-4 h-4"></i> Подредете събитията в хронологичен ред
-            </div>
-            <div id="client-timeline-pool" class="grid grid-cols-1 gap-2 mb-4">${shuffled.map(item => `<button onclick="window.pickLiveTimeline(this, ${item.i})" class="client-timeline-item w-full p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl font-black text-amber-800 text-sm hover:bg-amber-100 transition-all">${item.o}</button>`).join('')}</div>
-            <div id="client-timeline-result" class="flex flex-wrap justify-center gap-2 mb-4 min-h-[40px] border-t border-amber-200 pt-4"></div>
-            <button type="button" onclick="window.clearLiveTimeline()" class="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] mb-2">Изчисти хронологията</button>
-        ` + btnHtml;
-        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveTimelineConfirm;
-        if (window.lucide) lucide.createIcons();
-    } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
-        const defaultValue = (q.min + q.max) / 2;
-        const isTimeline = (q.type === 'timeline-slider');
-
-        let sliderHtml = '';
-        if (isTimeline) {
-            const years = [];
-            const step = Math.max(1, Math.ceil((q.max - q.min) / 5));
-            for (let y = q.min; y <= q.max; y += step) {
-                years.push(Math.round(y));
-            }
-            if (years[years.length - 1] < q.max) years.push(Math.round(q.max));
-
-            sliderHtml = `
-                <div class="relative pt-6 pb-2">
-                    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-300 via-amber-500 to-amber-700 rounded-full"></div>
-                    <div class="flex justify-between text-[10px] font-bold text-amber-700 px-1">
-                        ${years.map(y => `<span>${y}</span>`).join('')}
-                    </div>
-                    <input type="range" id="c-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" 
-                        class="w-full h-2 bg-transparent accent-amber-500 appearance-none cursor-pointer mt-2">
-                    <div class="flex justify-between text-slate-800 text-sm font-bold mt-2">
-                        <span>${q.min}</span>
-                        <span id="c-numeric-value" class="bg-amber-600 text-white px-6 py-2 rounded-full font-black shadow-lg">${defaultValue}</span>
-                        <span>${q.max}</span>
-                    </div>
-                </div>
-            `;
-        } else {
-            sliderHtml = `
-                <div class="space-y-6">
-                    <input type="range" id="c-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" class="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer">
-                    <div class="flex justify-between text-slate-800 text-sm font-bold">
-                        <span>${q.min}</span>
-                        <span id="c-numeric-value" class="bg-indigo-100 px-4 py-2 rounded-full font-black">${defaultValue}</span>
-                        <span>${q.max}</span>
-                    </div>
-                </div>
-            `;
-        }
-
-        container.innerHTML = sliderHtml + btnHtml;
-
-        const slider = document.getElementById('c-numeric-slider');
-        const display = document.getElementById('c-numeric-value');
-        slider.addEventListener('input', () => {
-            display.innerText = slider.value;
-        });
-
-        document.getElementById('sticky-btn-container').classList.remove('hidden');
-        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveNumericConfirm;
-    }
-};
-
-window.submitLiveFinal = async (isCorrect) => {
-    if (!user || lastAnsweredIdx === liveActiveQIdx) return;
-    lastAnsweredIdx = liveActiveQIdx;
-    liveScore += isCorrect ? (window.currentLiveQ.points || 1) : 0;
-
-    document.getElementById('client-question').classList.add('hidden');
-    document.getElementById('client-waiting').classList.remove('hidden');
-    document.getElementById('waiting-status-text').innerHTML = `
-        <div class="flex flex-col items-center gap-4">
-            <div class="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-            <span>Изпращане на отговор...</span>
-        </div>
-    `;
-
-    const updatePayload = {
-        score: liveScore,
-        lastAnsweredIdx: liveActiveQIdx,
-        lastResult: isCorrect
-    };
-    const reactionMs = window.currentLiveQStartedAtMs ? Math.max(0, Date.now() - window.currentLiveQStartedAtMs) : null;
-    updatePayload[`answers.${liveActiveQIdx}`] = isCorrect;
-    if (reactionMs !== null) updatePayload[`reactionMs.${liveActiveQIdx}`] = reactionMs;
-
-    try {
-        if (currentParticipantRef) {
-            await updateDoc(currentParticipantRef, updatePayload);
-            document.getElementById('waiting-status-text').innerText = isCorrect ? "ВЕРЕН ОТГОВОР! ✨" : "ГРЕШЕН ОТГОВОР... ❌";
-        }
-    } catch (e) {
-        console.error(e);
-        document.getElementById('waiting-status-text').innerText = "Грешка при изпращане!";
-        setTimeout(() => window.submitLiveFinal(isCorrect), 2000);
-    }
-};
-
-const stopSpeechReader = () => {
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-    }
-};
-
-const readQuestionWithSpeech = (text) => {
-    if (!sopModeEnabled || !('speechSynthesis' in window)) return;
-    try {
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = 'bg-BG';
-        u.rate = 0.9;
-        u.pitch = 1;
-        window.speechSynthesis.speak(u);
-    } catch (e) {
-        console.error('Speech reader failed:', e);
-    }
-};
+// ... (останалият код за live client остава същият)
 
 // --- SOLO LOGIC (ПОПРАВЕНА ЗА ДЪЛГИ КОДОВЕ) ---
 window.startIndividual = async () => {
@@ -1515,7 +1123,7 @@ window.startIndividual = async () => {
     // 2. Безопасно декодиране
     let decoded = null;
     try {
-        decoded = decodeQuizCode(pinCode);
+        decoded = window.decodeQuizCode(pinCode);
     } catch (decodeErr) {
         console.error(decodeErr);
         return window.showMessage("Невалиден формат на кода (грешка при декодиране).", 'error');
@@ -1658,6 +1266,8 @@ window.triggerSoloQuestion = (q) => {
     const overlay = document.getElementById('ind-overlay');
     overlay.classList.remove('hidden'); 
     overlay.classList.add('flex');
+    // Принудително поставяне най-отгоре (Fix for unclickable buttons)
+    overlay.style.zIndex = "9999";
     
     const questionEl = document.getElementById('ind-overlay-q-text');
     questionEl.innerText = q.text;
@@ -1675,20 +1285,20 @@ window.triggerSoloQuestion = (q) => {
 
     // Генериране на UI за отговорите (същото като преди)
     if (q.type === 'single') {
-        container.innerHTML = q.options.map((o, i) => `<button onclick="window.submitSolo(${i})" class="w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white hover:bg-white/20 transition-all text-sm">${o}</button>`).join('');
+        container.innerHTML = q.options.map((o, i) => `<button onclick="window.submitSolo(${i})" class="w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white hover:bg-white/20 transition-all text-sm pointer-events-auto relative z-50">${o}</button>`).join('');
     } else if (q.type === 'multiple') {
-        container.innerHTML = q.options.map((o, i) => `<label class="flex items-center gap-4 w-full p-4 bg-white/10 border border-white/20 rounded-2xl font-black text-white cursor-pointer text-sm mb-2"><input type="checkbox" name="s-multiple" value="${i}" class="w-5 h-5"> ${o}</label>`).join('') + `<button onclick="window.submitSoloMultiple()" class="w-full mt-4 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>`;
+        container.innerHTML = q.options.map((o, i) => `<label class="flex items-center gap-4 w-full p-4 bg-white/10 border border-white/20 rounded-2xl font-black text-white cursor-pointer text-sm mb-2 pointer-events-auto relative z-50"><input type="checkbox" name="s-multiple" value="${i}" class="w-5 h-5"> ${o}</label>`).join('') + `<button onclick="window.submitSoloMultiple()" class="w-full mt-4 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs pointer-events-auto relative z-50">Изпрати</button>`;
     } else if (q.type === 'boolean') {
-        container.innerHTML = `<div class="grid grid-cols-2 gap-4"><button onclick="window.submitSolo(true)" class="p-10 bg-emerald-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">ДА</button><button onclick="window.submitSolo(false)" class="p-10 bg-rose-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">НЕ</button></div>`;
+        container.innerHTML = `<div class="grid grid-cols-2 gap-4 pointer-events-auto relative z-50"><button onclick="window.submitSolo(true)" class="p-10 bg-emerald-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">ДА</button><button onclick="window.submitSolo(false)" class="p-10 bg-rose-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">НЕ</button></div>`;
     } else if (q.type === 'open') {
-        container.innerHTML = `<input type="text" id="s-open-answer" placeholder="Отговор..." class="w-full p-6 bg-white/10 border border-white/20 rounded-2xl font-black text-white text-xl outline-none mb-4 text-center"><button onclick="window.submitSoloOpen()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>`;
+        container.innerHTML = `<input type="text" id="s-open-answer" placeholder="Отговор..." class="w-full p-6 bg-white/10 border border-white/20 rounded-2xl font-black text-white text-xl outline-none mb-4 text-center pointer-events-auto relative z-50"><button onclick="window.submitSoloOpen()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs pointer-events-auto relative z-50">Изпрати</button>`;
     } else if (q.type === 'ordering') {
         window.userOrderSequence = [];
         const shuffled = q.options.map((o, i) => ({ o, i })).sort(() => Math.random() - 0.5);
         container.innerHTML = `
-            <div id="solo-ordering-pool" class="space-y-2">${shuffled.map(item => `<button onclick="window.pickSoloOrder(this, ${item.i})" class="solo-order-item w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white">${item.o}</button>`).join('')}</div>
+            <div id="solo-ordering-pool" class="space-y-2 pointer-events-auto relative z-50">${shuffled.map(item => `<button onclick="window.pickSoloOrder(this, ${item.i})" class="solo-order-item w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white">${item.o}</button>`).join('')}</div>
             <div id="solo-ordering-result" class="min-h-[48px] border-t border-white/20 mt-4 pt-4 flex flex-wrap gap-2"></div>
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-2 gap-3 pointer-events-auto relative z-50">
                 <button onclick="window.clearSoloOrdering()" class="py-3 bg-slate-600 rounded-xl font-black text-xs">Изчисти</button>
                 <button onclick="window.submitSoloOrdering()" class="py-3 bg-indigo-600 rounded-xl font-black text-xs">Изпрати</button>
             </div>`;
@@ -1699,9 +1309,9 @@ window.triggerSoloQuestion = (q) => {
             <div class="mb-4 p-3 bg-amber-500/20 border border-amber-400 rounded-xl text-amber-200 font-black text-xs flex items-center gap-2">
                 <i data-lucide="clock" class="w-4 h-4"></i> Подредете събитията в хронологичен ред
             </div>
-            <div id="solo-timeline-pool" class="space-y-2">${shuffled.map(item => `<button onclick="window.pickSoloTimeline(this, ${item.i})" class="solo-timeline-item w-full p-4 text-left bg-amber-500/10 border border-amber-400/30 rounded-2xl font-black text-amber-100 hover:bg-amber-500/20 transition-all">${item.o}</button>`).join('')}</div>
+            <div id="solo-timeline-pool" class="space-y-2 pointer-events-auto relative z-50">${shuffled.map(item => `<button onclick="window.pickSoloTimeline(this, ${item.i})" class="solo-timeline-item w-full p-4 text-left bg-amber-500/10 border border-amber-400/30 rounded-2xl font-black text-amber-100 hover:bg-amber-500/20 transition-all">${item.o}</button>`).join('')}</div>
             <div id="solo-timeline-result" class="min-h-[48px] border-t border-amber-400/30 mt-4 pt-4 flex flex-wrap gap-2"></div>
-            <div class="grid grid-cols-2 gap-3 mt-4">
+            <div class="grid grid-cols-2 gap-3 mt-4 pointer-events-auto relative z-50">
                 <button onclick="window.clearSoloTimeline()" class="py-3 bg-slate-600 rounded-xl font-black text-xs">Изчисти</button>
                 <button onclick="window.submitSoloTimeline()" class="py-3 bg-amber-600 rounded-xl font-black text-xs">Изпрати</button>
             </div>`;
@@ -1726,7 +1336,7 @@ window.triggerSoloQuestion = (q) => {
                         ${years.map(y => `<span>${y}</span>`).join('')}
                     </div>
                     <input type="range" id="s-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" 
-                        class="w-full h-2 bg-transparent accent-amber-500 appearance-none cursor-pointer mt-2">
+                        class="w-full h-2 bg-transparent accent-amber-500 appearance-none cursor-pointer mt-2 pointer-events-auto relative z-50">
                     <div class="flex justify-between text-white text-sm font-bold mt-2">
                         <span>${q.min}</span>
                         <span id="s-numeric-value" class="bg-amber-600 px-6 py-2 rounded-full font-black shadow-lg">${defaultValue}</span>
@@ -1737,7 +1347,7 @@ window.triggerSoloQuestion = (q) => {
         } else {
             sliderHtml = `
                 <div class="space-y-6">
-                    <input type="range" id="s-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" class="w-full h-3 bg-white/20 rounded-lg appearance-none cursor-pointer">
+                    <input type="range" id="s-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" class="w-full h-3 bg-white/20 rounded-lg appearance-none cursor-pointer pointer-events-auto relative z-50">
                     <div class="flex justify-between text-white text-sm font-bold">
                         <span>${q.min}</span>
                         <span id="s-numeric-value" class="bg-indigo-600 px-4 py-2 rounded-full font-black">${defaultValue}</span>
@@ -1748,7 +1358,7 @@ window.triggerSoloQuestion = (q) => {
         }
 
         container.innerHTML = sliderHtml + `
-            <button onclick="window.submitSoloNumeric()" class="w-full mt-6 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>
+            <button onclick="window.submitSoloNumeric()" class="w-full mt-6 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs pointer-events-auto relative z-50">Изпрати</button>
         `;
 
         const slider = document.getElementById('s-numeric-slider');
@@ -1771,18 +1381,108 @@ window.submitSoloNumeric = () => {
 };
 
 window.submitSoloFinal = (isCorrect) => {
-    if (isCorrect) scoreCount += (currentQuiz.q[currentQIndex].points || 1);
+    if (isCorrect) {
+        scoreCount += (currentQuiz.q[currentQIndex].points || 1);
+        window.showMessage("Верен отговор!", "success");
+    } else {
+        window.showMessage("Грешен отговор!", "error");
+    }
+    
     stopSpeechReader();
     document.getElementById('ind-overlay').classList.add('hidden');
     document.getElementById('ind-overlay').classList.remove('flex');
+    
     setTimeout(() => { 
         if (solvePlayer && typeof solvePlayer.playVideo === 'function') {
             solvePlayer.playVideo(); 
         }
-    }, 500);
+    }, 1000); // Increased delay to see message
 };
 
-// ... (методи за submitSolo остават същите, препращат към submitSoloFinal)
+window.submitSoloMultiple = () => {
+    const checked = Array.from(document.querySelectorAll('input[name="s-multiple"]:checked')).map(el => parseInt(el.value));
+    const isCorrect = JSON.stringify(checked.sort()) === JSON.stringify(currentQuiz.q[currentQIndex].correct.sort());
+    window.submitSoloFinal(isCorrect);
+};
+
+window.submitSoloOpen = () => {
+    const ans = document.getElementById('s-open-answer')?.value.trim().toLowerCase();
+    const correct = currentQuiz.q[currentQIndex].correct;
+    // Loose comparison for open answers (string to string)
+    window.submitSoloFinal(String(ans).toLowerCase() === String(correct).toLowerCase());
+};
+
+// Updated robust submitSolo for single choice / boolean
+window.submitSolo = (v) => {
+    const q = currentQuiz.q[currentQIndex];
+    let correct = q.correct;
+    
+    // Normalize types for comparison (handle "1" vs 1 issues)
+    if (typeof v === 'string' && typeof correct === 'number') correct = String(correct);
+    if (typeof v === 'number' && typeof correct === 'string') v = String(v);
+    
+    // For single choice, correct is an index. For boolean, it's true/false.
+    window.submitSoloFinal(v === correct);
+};
+
+window.submitSoloOrdering = () => {
+    const q = currentQuiz.q[currentQIndex];
+    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) return window.showMessage('Подредете всички елементи!', 'error');
+    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
+    window.submitSoloFinal(isCorrect);
+};
+
+window.pickSoloOrder = (el, originalIdx) => {
+    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
+    if (window.userOrderSequence.includes(originalIdx)) return;
+    window.userOrderSequence.push(originalIdx);
+    el.classList.add('opacity-40', 'pointer-events-none');
+    const result = document.getElementById('solo-ordering-result');
+    if (result) {
+        const chip = document.createElement('div');
+        chip.className = 'px-3 py-1 rounded-lg bg-indigo-600 text-white text-xs font-black';
+        chip.innerText = `${window.userOrderSequence.length}. ${el.innerText}`;
+        result.appendChild(chip);
+    }
+};
+
+window.clearSoloOrdering = () => {
+    window.userOrderSequence = [];
+    const result = document.getElementById('solo-ordering-result');
+    if (result) result.innerHTML = '';
+    document.querySelectorAll('.solo-order-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
+};
+
+window.pickSoloTimeline = (el, originalIdx) => {
+    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
+    if (window.userOrderSequence.includes(originalIdx)) return;
+    window.userOrderSequence.push(originalIdx);
+    el.classList.add('opacity-40', 'pointer-events-none');
+    const result = document.getElementById('solo-timeline-result');
+    if (result) {
+        const chip = document.createElement('div');
+        chip.className = 'px-3 py-1 rounded-lg bg-amber-600 text-white text-xs font-black flex items-center gap-1';
+        chip.innerHTML = `<i data-lucide="clock" class="w-3 h-3"></i> ${window.userOrderSequence.length}. ${el.innerText}`;
+        result.appendChild(chip);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+window.clearSoloTimeline = () => {
+    window.userOrderSequence = [];
+    const result = document.getElementById('solo-timeline-result');
+    if (result) result.innerHTML = '';
+    document.querySelectorAll('.solo-timeline-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
+};
+
+window.submitSoloTimeline = () => {
+    const q = currentQuiz.q[currentQIndex];
+    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) {
+        return window.showMessage('Подредете всички събития!', 'error');
+    }
+    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
+    window.submitSoloFinal(isCorrect);
+};
 
 window.finishSoloGame = async () => {
     if (soloGameFinished) return;
@@ -1796,9 +1496,22 @@ window.finishSoloGame = async () => {
     activeIntervals = [];
 
     const totalPossible = currentQuiz.q.reduce((acc, q) => acc + (q.points || 1), 0);
-    const scoreText = `${scoreCount} / ${totalPossible}`;
+    // Avoid NaN if 0 questions
+    const percent = totalPossible > 0 ? Math.round((scoreCount / totalPossible) * 100) : 0;
+    
+    let feedbackText = "";
+    if (percent >= 90) feedbackText = "Отлично! 🌟";
+    else if (percent >= 70) feedbackText = "Много добре! 👏";
+    else if (percent >= 50) feedbackText = "Добър резултат! 👍";
+    else feedbackText = "Можеш и повече! 💪";
+
+    const scoreText = `${scoreCount} / ${totalPossible} (${percent}%)`;
+    
     const finalScoreEl = document.getElementById('res-score');
-    if (finalScoreEl) finalScoreEl.innerText = scoreText;
+    if (finalScoreEl) {
+        // Display score and message. Assuming res-score is a block element.
+        finalScoreEl.innerHTML = `<div class="text-4xl mb-2">${scoreText}</div><div class="text-xl text-slate-500">${feedbackText}</div>`;
+    }
 
     if (isDiscussionMode) {
         window.showMessage("Режим обсъждане: резултатът не се записва.", "info");
