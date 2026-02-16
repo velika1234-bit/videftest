@@ -5,7 +5,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Админ достъп: master UID или profile с role/accessLevel = admin (current + legacy app scope)
+    // Админ достъп: master UID или profile с role/accessLevel = admin
     function hasAdminProfileIn(appId) {
       return isSignedIn()
              && exists(/databases/$(database)/documents/artifacts/$(appId)/users/$(request.auth.uid)/settings/profile)
@@ -23,36 +23,26 @@ service cloud.firestore {
       return isSignedIn() && (request.auth.uid == 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2' || hasAdminProfile());
     }
 
-    // Правила за current + legacy scope
     match /artifacts/{appId} {
       allow read, write: if false;
 
-      // ВАЖНО: profile docs са четени чрез collectionGroup('profile') от admin панела.
-      // Ако тук ограничим appId до конкретен списък, query-то може да fail-не с
-      // Missing or insufficient permissions заради други appId scope-ове.
       match /users/{userId}/settings/profile {
         allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       }
 
       match /public/data/{document=**} {
-        // Публична част (join/live flow): четене е публично, запис само за логнати.
         allow read: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'];
         allow write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'] && isSignedIn();
       }
 
       match /users/{userId}/{document=**} {
-        // Всеки учител вижда/редактира само своята папка.
-        // Админът има достъп до всички учители (нужно за admin panel статистики).
         allow read, write: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate']
                            && isSignedIn()
                            && (request.auth.uid == userId || isAdmin());
       }
 
       match /users/{teacherId}/solo_results/{resultId} {
-        // Ученици (вкл. анонимни логнати) записват соло резултати.
         allow create: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate'] && isSignedIn();
-
-        // Учителят собственик или админ може да чете/трие/редактира.
         allow read, update, delete: if appId in ['videoquiz-ultimate-live', 'videoquiz-ultimate']
                                     && isSignedIn()
                                     && (request.auth.uid == teacherId || isAdmin());
