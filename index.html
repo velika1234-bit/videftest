@@ -6,35 +6,61 @@
     <title>VideoQuiz Ultimate</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
     
+    <!-- Външни библиотеки -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://www.youtube.com/iframe_api"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <!-- QR Code Generator -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700;900&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Nunito', sans-serif; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .hidden { display: none !important; }
+        .flex { display: flex !important; }
+        /* Анимация за изскачащи съобщения */
+        @keyframes pop {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: pop 0.2s ease-out; }
     </style>
     
-    <!-- ERROR HANDLER: Ако сайтът зависне, това ще покаже защо -->
+    <!-- Подобрен error handler -->
     <script>
         window.onerror = function(message, source, lineno, colno, error) {
             const loader = document.getElementById('auth-loader');
             if (loader) {
                 loader.innerHTML = `
-                    <div class="text-rose-600 text-center p-4">
+                    <div class="text-rose-600 text-center p-4 max-w-md">
                         <h2 class="text-2xl font-black mb-2">Грешка!</h2>
                         <p class="font-bold">${message}</p>
-                        <p class="text-sm mt-2 opacity-75">Моля, проверете конзолата (F12) за детайли.</p>
-                        <button onclick="location.reload()" class="mt-4 px-6 py-2 bg-slate-800 text-white rounded-xl font-bold">Опитай пак</button>
+                        <p class="text-sm mt-2 opacity-75">Файл: ${source || 'неизвестен'}, ред: ${lineno}</p>
+                        <p class="text-xs mt-1 opacity-50">Моля, проверете конзолата (F12) за детайли.</p>
+                        <button onclick="location.reload()" class="mt-4 px-6 py-2 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition">Опитай пак</button>
                     </div>
                 `;
             }
         };
+        
+        // Резервен механизъм за Lucide
+        window.lucideFallback = function() {
+            if (typeof lucide === 'undefined') {
+                console.warn('Lucide icons not loaded, retrying...');
+                setTimeout(() => {
+                    if (typeof lucide !== 'undefined') {
+                        lucide.createIcons();
+                    }
+                }, 2000);
+            }
+        };
+        setTimeout(window.lucideFallback, 3000);
     </script>
 </head>
 <body class="bg-slate-50 text-slate-800 h-screen overflow-hidden selection:bg-indigo-100 selection:text-indigo-700">
@@ -45,6 +71,7 @@
         <div id="auth-loader" class="fixed inset-0 bg-white z-[9999] flex items-center justify-center flex-col gap-4">
             <div class="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
             <p class="font-black text-indigo-900 animate-pulse">ЗАРЕЖДАНЕ...</p>
+            <p class="text-xs text-slate-400">Ако това отнеме повече от няколко секунди, опреснете страницата.</p>
         </div>
 
         <!-- NOTIFICATIONS -->
@@ -52,14 +79,14 @@
 
         <!-- 1. WELCOME SCREEN -->
         <div id="screen-welcome" class="hidden h-full flex flex-col md:flex-row overflow-y-auto">
-            <!-- Left: Students -->
+            <!-- Лява част – ученици -->
             <div class="flex-1 bg-white p-6 md:p-12 flex flex-col justify-center items-center relative overflow-hidden">
                 <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
                 
                 <h1 class="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter mb-8 text-center">VideoQuiz</h1>
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full max-w-4xl z-10">
-                    <!-- Card 1: Individual Mode -->
+                    <!-- Карта 1: Индивидуално -->
                     <div class="bg-slate-50 p-6 rounded-3xl border border-slate-200 hover:border-indigo-300 transition-all group">
                         <h3 class="text-indigo-600 font-black text-xl mb-4 flex items-center gap-2"><i data-lucide="user" class="w-5 h-5"></i> Индивидуално</h3>
                         <form onsubmit="event.preventDefault(); window.startIndividual();" class="space-y-4">
@@ -83,7 +110,7 @@
                         </form>
                     </div>
 
-                    <!-- Card 2: Class Mode (Live) -->
+                    <!-- Карта 2: В Клас -->
                     <div class="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 hover:border-emerald-300 transition-all relative overflow-hidden">
                         <div class="absolute top-0 right-0 p-4 opacity-10 text-emerald-900"><i data-lucide="users" class="w-24 h-24"></i></div>
                         <h3 class="text-emerald-700 font-black text-xl mb-4 relative z-10 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5"></i> В Клас</h3>
@@ -105,7 +132,7 @@
                 </div>
             </div>
 
-            <!-- Right: Teacher Login -->
+            <!-- Дясна част – учители -->
             <div class="bg-slate-900 p-8 flex flex-col justify-center items-center text-white relative w-full md:w-[350px] lg:w-[400px] shrink-0 border-l border-slate-800">
                 <div class="w-full space-y-6 z-10">
                     <h2 id="auth-title" class="text-xl font-black text-center text-indigo-400 uppercase tracking-widest">Учители</h2>
@@ -172,220 +199,263 @@
              </main>
         </div>
 
-        <!-- 3. EDITOR SCREEN -->
+        <!-- 3. CREATE / EDITOR SCREEN -->
         <div id="screen-create" class="hidden h-full flex flex-col bg-slate-50">
             <header class="bg-white border-b px-6 py-3 flex justify-between items-center sticky top-0 z-30 shadow-sm">
                 <div class="flex items-center gap-4">
-                    <button onclick="window.switchScreen('teacher-dashboard')" class="text-slate-400 hover:text-slate-600"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
-                    <h2 class="font-black text-slate-800">Редактор</h2>
+                    <button onclick="window.switchScreen('teacher-dashboard')" class="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                        <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                    </button>
+                    <h2 class="font-black text-slate-800 text-lg">Редактор на уроци</h2>
                 </div>
-                <button onclick="window.saveQuizToLibrary()" class="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 transition-all">Запази</button>
+                <button onclick="window.saveQuizToLibrary()" class="px-6 py-2 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-md">Запази</button>
             </header>
-            <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
-                <div class="flex-1 bg-black relative flex flex-col justify-center">
-                    <div id="editor-player-container" class="aspect-video w-full max-h-full"></div>
-                    <div id="editor-view" class="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center p-8 hidden"></div>
-                    <div class="absolute top-4 left-4 right-4 z-30 flex gap-2">
-                        <input type="text" id="yt-url" placeholder="YouTube линк..." class="flex-1 p-3 rounded-xl border-none shadow-lg bg-white/90 backdrop-blur font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-                        <button onclick="window.loadEditorVideo()" class="p-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700">Зареди</button>
+
+            <main class="flex-1 overflow-y-auto p-6 max-w-7xl mx-auto w-full space-y-6">
+                <!-- YouTube URL -->
+                <div class="bg-white p-6 rounded-2xl border shadow-sm">
+                    <label class="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+                        <i data-lucide="link" class="w-4 h-4"></i> YouTube линк
+                    </label>
+                    <div class="flex gap-3">
+                        <input type="text" id="yt-url" placeholder="https://youtu.be/... или ID" class="flex-1 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black outline-none focus:border-indigo-600 transition-all">
+                        <button onclick="window.loadEditorVideo(false)" class="px-6 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm hover:bg-indigo-700 transition-all shadow-md">Зареди</button>
                     </div>
                 </div>
-                <div class="w-full lg:w-96 bg-white border-l border-slate-200 flex flex-col">
-                    <div class="p-4 border-b bg-slate-50 flex justify-between items-center">
-                        <span class="text-xs font-black text-slate-400 uppercase">Въпроси</span>
-                        <div class="flex items-center gap-2">
-                            <span id="timer" class="font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg text-xs">00:00</span>
-                            <button onclick="window.openQuestionModal()" class="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform"><i data-lucide="plus" class="w-4 h-4"></i></button>
+
+                <!-- Видео плейър и въпроси -->
+                <div id="editor-view" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Ляво: видео -->
+                    <div class="lg:col-span-2 bg-white rounded-2xl border shadow-sm p-4">
+                        <div id="editor-player-container" class="aspect-video bg-black rounded-xl overflow-hidden"></div>
+                        <div class="mt-3 flex items-center gap-2 text-xs font-bold text-slate-500">
+                            <i data-lucide="clock" class="w-4 h-4"></i>
+                            <span id="timer">0:00</span>
                         </div>
                     </div>
-                    <div id="q-list" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+
+                    <!-- Дясно: списък с въпроси -->
+                    <div class="bg-white rounded-2xl border shadow-sm p-4 flex flex-col h-[70vh]">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-black text-slate-800">Въпроси</h3>
+                            <button onclick="window.openQuestionModal()" class="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        <div id="q-list" class="flex-1 overflow-y-auto space-y-2 scrollbar-hide"></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- 4. HOST LOBBY -->
+        <div id="screen-host-lobby" class="hidden h-full flex flex-col items-center justify-center bg-gradient-to-b from-indigo-50 to-white p-6">
+            <div class="max-w-md w-full bg-white rounded-3xl shadow-xl border border-indigo-100 p-8 text-center space-y-6">
+                <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-indigo-200">
+                    <i data-lucide="radio" class="w-10 h-10 text-white"></i>
+                </div>
+                <h2 class="text-2xl font-black text-slate-800">Вашият ПИН код</h2>
+                <div id="host-pin" class="text-5xl font-black text-indigo-600 tracking-widest bg-indigo-50 py-4 rounded-2xl border-2 border-indigo-200">----</div>
+                <p class="text-sm text-slate-500">Участниците да въведат този код, за да се включат.</p>
+                <div class="flex items-center justify-center gap-2 text-slate-600">
+                    <i data-lucide="users" class="w-5 h-5"></i>
+                    <span id="host-participant-count" class="font-black">0</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="window.quitHostSession()" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">Назад</button>
+                    <button onclick="window.initHostPlayer()" class="py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-md">Старт на сесия</button>
                 </div>
             </div>
         </div>
 
-        <!-- 4. LIVE HOST SCREEN -->
-        <div id="screen-live-host" class="hidden h-full flex flex-col bg-slate-100">
-            <div class="bg-indigo-600 text-white px-6 py-2 shadow-md flex justify-between items-center shrink-0 z-20 h-16">
+        <!-- 5. HOST GAME -->
+        <div id="screen-host-game" class="hidden h-full flex flex-col bg-slate-900 text-white">
+            <header class="bg-slate-800/50 backdrop-blur-sm border-b border-white/10 px-6 py-3 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <button onclick="window.quitHostSession()" class="p-2 text-white/50 hover:text-white transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                    <span class="font-black text-indigo-300">ПИН: <span id="host-pin-game" class="text-white"></span></span>
+                </div>
                 <div class="flex items-center gap-3">
-                    <div class="bg-white/10 px-4 py-2 rounded-xl backdrop-blur-sm border border-white/10">
-                        <span class="text-[10px] uppercase font-bold text-indigo-200 tracking-widest block leading-none mb-1">ПИН за вход</span>
-                        <h1 id="host-pin" class="text-3xl font-black leading-none tracking-widest text-white">...</h1>
-                    </div>
+                    <span id="host-timer" class="font-mono text-lg">0:00</span>
                 </div>
-                <div id="host-stats-bar" class="hidden md:flex bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/10 items-center gap-3 flex-1 max-w-xl mx-4">
-                     <div id="class-progress-bar" class="flex-1 h-2 bg-black/20 rounded-full overflow-hidden flex opacity-0 transition-opacity duration-500">
-                        <div id="progress-correct" class="bg-emerald-400 h-full transition-all duration-500" style="width: 0%"></div>
-                        <div id="progress-wrong" class="bg-rose-400 h-full transition-all duration-500" style="width: 0%"></div>
-                     </div>
-                     <span id="progress-percent" class="font-black text-white text-xs">0%</span>
-                </div>
-                <div class="flex gap-2">
-                    <div id="export-buttons-container" class="hidden gap-2 animate-fade-in">
-                        <button onclick="window.exportExcel()" class="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition-all"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i></button>
-                        <button onclick="window.exportPDF()" class="px-3 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition-all"><i data-lucide="file-text" class="w-4 h-4"></i></button>
-                    </div>
-                    <button onclick="window.quitHostSession()" class="px-4 py-2 bg-white text-indigo-600 hover:bg-indigo-50 rounded-lg font-bold text-xs transition-all border border-transparent hover:border-indigo-200">Край</button>
-                </div>
-            </div>
-            <div class="flex-1 flex flex-col lg:flex-row overflow-hidden p-3 gap-3">
-                <div class="flex-1 bg-black rounded-2xl shadow-xl overflow-hidden relative border-4 border-white/20 group min-h-[300px]">
+            </header>
+
+            <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                <!-- Ляво: видео -->
+                <div class="lg:w-3/5 h-64 lg:h-full bg-black">
                     <div id="host-video-container" class="w-full h-full"></div>
-                    <div class="absolute bottom-4 right-4 pointer-events-none">
-                         <div class="bg-black/60 backdrop-blur-md border border-white/10 text-white font-black text-4xl px-6 py-2 rounded-2xl shadow-lg" id="host-timer">00:00</div>
-                    </div>
                 </div>
-                <div class="w-full lg:w-80 flex flex-col shrink-0 gap-3 h-1/3 lg:h-full">
-                    <div class="bg-white rounded-2xl shadow-lg border border-slate-100 flex flex-col h-full overflow-hidden">
-                        <div class="p-3 border-b bg-slate-50 flex justify-between items-center shrink-0">
-                            <h3 class="font-black text-slate-600 uppercase tracking-widest text-[10px]">Класиране</h3>
-                            <span id="host-participant-count" class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md text-[10px] font-black">0</span>
+
+                <!-- Дясно: табло и класация -->
+                <div class="lg:w-2/5 bg-white text-slate-800 overflow-y-auto p-4 space-y-4">
+                    <!-- Прогрес бар -->
+                    <div id="class-progress-bar" class="opacity-0 transition-opacity">
+                        <div class="flex justify-between text-xs font-bold mb-1">
+                            <span class="text-emerald-600">Верни</span>
+                            <span class="text-rose-600">Грешни</span>
                         </div>
-                        <div class="flex-1 overflow-y-auto p-2 scrollbar-hide relative">
-                            <table class="w-full text-left border-collapse">
-                                <tbody id="host-results-body"></tbody>
-                            </table>
+                        <div class="h-2 bg-slate-200 rounded-full overflow-hidden flex">
+                            <div id="progress-correct" class="h-full bg-emerald-500 transition-all duration-500"></div>
+                            <div id="progress-wrong" class="h-full bg-rose-400 transition-all duration-500"></div>
                         </div>
-                        <div id="host-qr-container" class="p-4 border-t border-slate-100 bg-slate-50 flex flex-col items-center justify-center shrink-0 transition-all">
-                             <div class="w-8 h-8 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin mb-2"></div>
-                             <p class="text-[9px] text-slate-400 font-bold">Генериране...</p>
+                        <div class="flex justify-between mt-1 text-[10px] text-slate-500">
+                            <span id="progress-stats-text">...</span>
+                            <span id="progress-percent" class="font-black">0%</span>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- 5. STUDENT CLIENT SCREENS -->
-        <div id="screen-live-client" class="hidden h-full flex flex-col bg-slate-50 relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-full h-2 bg-indigo-500 z-20"></div>
-            <div id="client-waiting" class="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-6">
-                <div class="text-6xl animate-bounce">👀</div>
-                <div>
-                    <h2 class="text-2xl font-black text-slate-800">Гледай екрана!</h2>
-                    <p id="waiting-status-text" class="text-slate-500 font-bold mt-2">Очаквай въпрос...</p>
-                </div>
-                <div class="bg-white px-6 py-3 rounded-full shadow-sm border border-slate-200 flex items-center gap-3">
-                    <span id="my-avatar-display" class="text-2xl">😎</span>
-                    <span class="font-black text-slate-700 text-sm">Ти си в играта</span>
-                </div>
-            </div>
-            <div id="client-question" class="hidden flex-1 flex flex-col p-4 pb-32 overflow-y-auto">
-                <div class="bg-white p-6 rounded-3xl shadow-sm border-b-4 border-slate-100 mb-6">
-                    <p id="live-q-text-client" class="text-lg font-black text-slate-800 text-center leading-relaxed">...</p>
-                </div>
-                <div id="live-options-client" class="space-y-3 max-w-md mx-auto w-full"></div>
-            </div>
-            <div id="client-finished" class="hidden flex-1 flex flex-col items-center justify-center p-8 bg-indigo-600 text-white text-center">
-                <h1 class="text-4xl font-black mb-2">КРАЙ!</h1>
-                <p class="font-bold opacity-80 mb-8">Твоят резултат:</p>
-                <div class="bg-white text-indigo-600 w-32 h-32 rounded-full flex items-center justify-center font-black text-3xl shadow-2xl mb-8" id="final-score-display">0</div>
-                <button onclick="location.reload()" class="px-8 py-3 bg-indigo-800 hover:bg-indigo-900 rounded-xl font-bold text-sm transition-all">Нова игра</button>
-            </div>
-        </div>
+                    <!-- Най-бърз отговор -->
+                    <div id="fastest-reaction-text" class="text-sm font-bold text-amber-600 bg-amber-50 p-3 rounded-xl">⚡ Най-бърз отговор: няма данни</div>
 
-        <!-- 6. SOLO / SOLVE SCREEN -->
-        <div id="screen-solve" class="hidden h-full flex flex-col bg-black">
-            <div class="flex-1 relative flex items-center justify-center">
-                <div id="solve-player-container" class="w-full h-full absolute inset-0"></div>
-                <div id="ind-overlay" class="absolute inset-0 bg-slate-900/95 z-50 hidden flex-col items-center justify-center p-6 sm:p-10 animate-fade-in overflow-y-auto">
-                    <div class="w-full max-w-2xl space-y-8 text-center">
-                         <h2 id="ind-overlay-q-text" class="font-black text-white leading-tight drop-shadow-lg">Въпрос?</h2>
-                         <div id="ind-overlay-options" class="grid gap-3 w-full"></div>
+                    <!-- Класация -->
+                    <div class="border-t pt-4">
+                        <h3 class="font-black text-lg mb-3 flex items-center gap-2"><i data-lucide="trophy" class="w-5 h-5 text-amber-500"></i> Класация</h3>
+                        <table class="w-full text-left text-sm">
+                            <thead class="text-slate-400 text-[10px] font-black uppercase">
+                                <tr><th class="pb-2">Участник</th><th class="pb-2 text-right">Точки</th><th class="pb-2"></th></tr>
+                            </thead>
+                            <tbody id="host-results-body"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Бутони за експорт (появяват се след приключване) -->
+                    <div id="export-buttons-container" class="hidden flex-col gap-2 mt-4">
+                        <button onclick="window.exportExcel()" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-sm hover:bg-emerald-700 transition-all">Експорт Excel</button>
+                        <button onclick="window.exportPDF()" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all">Експорт PDF</button>
                     </div>
                 </div>
-            </div>
+            </main>
         </div>
 
-        <!-- 7. FINISH SCREEN -->
-        <div id="screen-finish" class="hidden h-full flex flex-col items-center justify-center bg-slate-50 p-8 text-center">
-            <div class="bg-white p-10 rounded-[3rem] shadow-2xl border-b-8 border-indigo-100 max-w-md w-full space-y-6 animate-pop">
-                <div class="w-20 h-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-4xl mb-4">🏆</div>
-                <h2 class="text-3xl font-black text-slate-800">Резултат</h2>
-                <div id="res-score" class="text-5xl font-black text-indigo-600 py-4">0 / 0</div>
-                <button onclick="window.switchScreen('welcome')" class="w-full py-4 bg-slate-800 text-white rounded-2xl font-bold uppercase tracking-wider hover:bg-slate-900 transition-all">Начало</button>
-            </div>
-        </div>
+        <!-- 6. PARTICIPANT (CLIENT) GAME -->
+        <div id="screen-live-client" class="hidden h-full flex flex-col bg-slate-900 text-white">
+            <header class="bg-slate-800/50 backdrop-blur-sm border-b border-white/10 px-6 py-3 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <span id="my-avatar-display" class="text-2xl">👤</span>
+                    <span class="font-black text-sm truncate max-w-[120px]" id="client-name-display"></span>
+                </div>
+                <span class="font-mono text-sm text-indigo-300">ПИН: <span id="client-pin-display"></span></span>
+            </header>
 
-        <!-- MODALS -->
-        <div id="modal-q" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center p-4 backdrop-blur-sm">
-            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-pop">
-                <div class="p-6 border-b bg-slate-50 flex justify-between items-center">
-                    <h3 id="m-title-text" class="font-black text-lg text-slate-800">Въпрос</h3>
-                    <div class="flex items-center gap-4">
-                        <span id="m-time" class="font-mono font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg text-xs">00:00</span>
-                        <button onclick="document.getElementById('modal-q').classList.add('hidden')" class="text-slate-400 hover:text-rose-500"><i data-lucide="x" class="w-6 h-6"></i></button>
+            <main class="flex-1 flex flex-col">
+                <!-- Видео зона -->
+                <div class="w-full aspect-video bg-black">
+                    <div id="client-video-container" class="w-full h-full"></div>
+                </div>
+
+                <!-- Състояние: изчакване, въпрос, завършено -->
+                <div class="flex-1 bg-white text-slate-800 p-6 overflow-y-auto">
+                    <!-- Изчакване -->
+                    <div id="client-waiting" class="h-full flex flex-col items-center justify-center text-center space-y-4">
+                        <div class="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                        <p id="waiting-status-text" class="font-black text-lg">Изчакай въпрос...</p>
+                    </div>
+
+                    <!-- Активен въпрос -->
+                    <div id="client-question" class="hidden h-full flex flex-col space-y-4">
+                        <h2 id="live-q-text-client" class="font-black text-xl"></h2>
+                        <div id="live-options-client" class="space-y-2 flex-1"></div>
+                        <!-- Тук динамично се добавят опциите -->
+                    </div>
+
+                    <!-- Сесията приключи -->
+                    <div id="client-finished" class="hidden h-full flex flex-col items-center justify-center text-center space-y-4">
+                        <div class="w-24 h-24 bg-emerald-100 rounded-3xl flex items-center justify-center text-emerald-600">
+                            <i data-lucide="check-circle" class="w-12 h-12"></i>
+                        </div>
+                        <p class="font-black text-2xl">Край!</p>
+                        <p class="text-lg">Вашият резултат:</p>
+                        <p id="final-score-display" class="text-4xl font-black text-indigo-600">0 / 0</p>
                     </div>
                 </div>
-                <div class="p-6 overflow-y-auto space-y-4">
-                     <div>
-                         <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Текст</label>
-                         <textarea id="m-text" class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-800 outline-none focus:border-indigo-500 h-24 resize-none"></textarea>
-                     </div>
-                     <div class="grid grid-cols-2 gap-4">
-                         <div>
-                             <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Тип</label>
-                             <select id="m-type" onchange="window.updateModalFields()" class="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm outline-none">
-                                 <option value="single">Един верен</option>
-                                 <option value="multiple">Множество верни</option>
-                                 <option value="boolean">Вярно / Грешно</option>
-                                 <option value="open">Отворен отговор</option>
-                                 <option value="ordering">Подреждане</option>
-                                 <option value="timeline">Хронология</option>
-                                 <option value="numeric">Числов отговор</option>
-                                 <option value="timeline-slider">Хронологичен плъзгач</option>
-                             </select>
-                         </div>
-                         <div>
-                             <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Точки</label>
-                             <input type="number" id="m-points" value="1" min="1" class="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm outline-none">
-                         </div>
-                     </div>
-                     <div id="m-opts-container" class="pt-2"></div>
-                </div>
-                <div class="p-6 border-t bg-slate-50">
-                    <button onclick="window.saveQuestion()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-wider hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">Запази</button>
+            </main>
+        </div>
+
+        <!-- 7. SOLO GAME (solve) -->
+        <div id="screen-solve" class="hidden h-full flex flex-col bg-slate-900">
+            <!-- Видео плейър за соло -->
+            <div id="solve-player-container" class="w-full h-full"></div>
+
+            <!-- Оувърлей за въпроси -->
+            <div id="ind-overlay" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                <div class="bg-indigo-600 text-white max-w-2xl w-full rounded-3xl p-6 shadow-2xl space-y-4">
+                    <h2 id="ind-overlay-q-text" class="font-black text-xl sm:text-4xl"></h2>
+                    <div id="ind-overlay-options" class="space-y-2"></div>
                 </div>
             </div>
         </div>
 
-        <div id="modal-share" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center p-4 backdrop-blur-sm">
-            <div class="bg-white rounded-3xl p-8 max-w-md w-full text-center space-y-6 animate-pop">
-                <h3 class="text-xl font-black text-slate-800">Сподели Урока</h3>
-                <div class="relative">
-                    <input type="text" id="share-code-display" readonly class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-mono text-xs text-slate-600 break-all pr-12">
-                    <button onclick="window.copyShareCode()" class="absolute right-2 top-2 p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500"><i data-lucide="copy" class="w-4 h-4"></i></button>
+        <!-- 8. SOLO FINISH SCREEN -->
+        <div id="screen-finish" class="hidden h-full flex items-center justify-center bg-gradient-to-br from-indigo-600 to-purple-600 p-6">
+            <div class="bg-white max-w-md w-full rounded-3xl p-8 text-center shadow-2xl space-y-6">
+                <div class="w-24 h-24 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto">
+                    <i data-lucide="trophy" class="w-12 h-12 text-emerald-600"></i>
                 </div>
-                <button onclick="document.getElementById('modal-share').classList.add('hidden')" class="text-sm font-bold text-slate-400 hover:text-slate-600">Затвори</button>
+                <h2 class="text-3xl font-black text-slate-800">Вашият резултат</h2>
+                <p id="res-score" class="text-5xl font-black text-indigo-600">0 / 0</p>
+                <button onclick="window.switchScreen('welcome')" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm hover:bg-indigo-700 transition-all shadow-md">Към началото</button>
             </div>
         </div>
-        
-        <div id="modal-import" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center p-4 backdrop-blur-sm">
-             <div class="bg-white rounded-3xl p-8 max-w-md w-full text-center space-y-6 animate-pop">
-                 <h3 class="text-xl font-black text-slate-800">Импорт на Урок</h3>
-                 <textarea id="import-code-input" placeholder="Постави кода тук..." class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-mono text-xs h-32 resize-none outline-none focus:border-indigo-500"></textarea>
-                 <div class="grid grid-cols-2 gap-4">
-                     <button onclick="document.getElementById('modal-import').classList.add('hidden')" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">Отказ</button>
-                     <button onclick="window.submitImport()" class="py-3 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600">Импортирай</button>
-                 </div>
-             </div>
-        </div>
-        
-        <div id="modal-rules-help" class="hidden fixed inset-0 bg-black/60 z-[10000] items-center justify-center p-4 backdrop-blur-sm">
-            <div class="bg-white rounded-3xl p-8 max-w-lg w-full space-y-4 animate-pop shadow-2xl relative">
-                <button onclick="document.getElementById('modal-rules-help').classList.add('hidden')" class="absolute top-4 right-4 text-slate-300 hover:text-slate-500"><i data-lucide="x" class="w-6 h-6"></i></button>
-                <div class="text-center">
-                    <h3 class="text-xl font-black text-slate-800">Проблем с достъпа</h3>
-                </div>
-                <div class="text-sm text-slate-600 space-y-2 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p>Браузърът ви блокира достъпа до базата данни.</p>
-                    <button onclick="window.requestStorageAccess()" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-black uppercase text-xs hover:bg-indigo-700">Опитай автоматично разрешаване</button>
+
+        <!-- МОДАЛ: Импорт на урок -->
+        <div id="modal-import" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl max-w-md w-full p-6 space-y-4">
+                <h3 class="font-black text-lg">Импортирай урок</h3>
+                <input type="text" id="import-code-input" placeholder="Постави кода тук..." class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-mono text-xs focus:border-indigo-600 outline-none">
+                <div class="flex gap-3">
+                    <button onclick="window.submitImport()" class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm">Импортирай</button>
+                    <button onclick="document.getElementById('modal-import').classList.add('hidden')" class="flex-1 py-3 bg-slate-200 rounded-xl font-black text-sm">Отказ</button>
                 </div>
             </div>
         </div>
+
+        <!-- МОДАЛ: Споделяне на код + QR -->
+        <div id="modal-share" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl max-w-md w-full p-6 space-y-4">
+                <h3 class="font-black text-lg">Код за споделяне</h3>
+                <input type="text" id="share-code-display" readonly class="w-full p-3 bg-slate-100 rounded-xl font-mono text-sm">
+                <div class="flex justify-center">
+                    <canvas id="qr-code-canvas" class="w-48 h-48 border border-slate-200 rounded-2xl"></canvas>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="window.copyShareCode()" class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm">Копирай</button>
+                    <button onclick="document.getElementById('modal-share').classList.add('hidden')" class="flex-1 py-3 bg-slate-200 rounded-xl font-black text-sm">Затвори</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- МОДАЛ: Помощ при права (permission denied) -->
+        <div id="modal-rules-help" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4">
+                <h3 class="font-black text-lg text-rose-600 flex items-center gap-2"><i data-lucide="alert-triangle" class="w-5 h-5"></i> Няма достъп</h3>
+                <p class="text-sm">Изглежда, че нямате права да четете/пишете в базата данни. Това може да се дължи на:</p>
+                <ul class="list-disc list-inside text-xs space-y-1 text-slate-600">
+                    <li>Липсващи или неправилни Firebase правила за сигурност.</li>
+                    <li>Вие не сте вписани като учител.</li>
+                    <li>Проблем с мрежата.</li>
+                </ul>
+                <p class="text-xs font-bold">Опитайте да презаредите страницата или се свържете с администратор.</p>
+                <button onclick="document.getElementById('modal-rules-help').classList.add('hidden'); rulesModalShown = false;" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-sm">Разбрах</button>
+            </div>
+        </div>
+
+        <!-- Скрит елемент за debug UID (не се вижда) -->
+        <span id="debug-uid" class="hidden"></span>
 
     </div>
 
-    <!-- MAIN LOGIC (В СЪЩАТА ДИРЕКТОРИЯ) -->
+    <!-- Главният JavaScript модул -->
     <script type="module" src="app.js"></script>
-
+    
+    <!-- Резервен скрипт за lucide (ако не се е заредил) -->
+    <script>
+        setTimeout(() => {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }, 2000);
+    </script>
 </body>
 </html>
