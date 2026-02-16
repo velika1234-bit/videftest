@@ -1,9 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
+// ПОПРАВКА: Добавено е 'getFunctions' в импорта по-долу, защото се използва на ред 24
+import { httpsCallable, getFunctions } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
+
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
@@ -19,7 +21,9 @@ const finalAppId = 'videoquiz-ultimate-live';
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+// Сега това ще работи, защото getFunctions е импортирано
 const functions = getFunctions(app, 'us-central1');
+
 // --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
@@ -82,16 +86,17 @@ onAuthStateChanged(auth, async (u) => {
         soloResults = [];
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
+
         // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
-const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; // ⚠️ ЗАМЕНИ!
-const adminBtn = document.getElementById('admin-panel-btn');
-if (adminBtn) {
-  if (user && user.uid === ADMIN_UID) {
-    adminBtn.classList.remove('hidden');
-  } else {
-    adminBtn.classList.add('hidden');
-  }
-}
+        const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; // ⚠️ Увери се, че това е правилното ID
+        const adminBtn = document.getElementById('admin-panel-btn');
+        if (adminBtn) {
+            if (user && user.uid === ADMIN_UID) {
+                adminBtn.classList.remove('hidden');
+            } else {
+                adminBtn.classList.add('hidden');
+            }
+        }
     }
     lastAuthUid = incomingUid;
     user = u;
@@ -99,9 +104,9 @@ if (adminBtn) {
 
     if (user) {
         const isAnon = user.isAnonymous;
-        const uidDisplay = isAnon ? `Анонимен (${user.uid.substring(0,5)}...)` : user.email;
+        const uidDisplay = isAnon ? `Анонимен (${user.uid.substring(0, 5)}...)` : user.email;
         const debugUidEl = document.getElementById('debug-uid');
-        if(debugUidEl) debugUidEl.innerText = uidDisplay;
+        if (debugUidEl) debugUidEl.innerText = uidDisplay;
 
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
         try {
@@ -194,9 +199,9 @@ window.switchScreen = (name) => {
     const target = document.getElementById('screen-' + name);
     if (target) target.classList.remove('hidden');
 
-    if (player) { try { player.destroy(); } catch(e) {} player = null; }
-    if (solvePlayer) { try { solvePlayer.destroy(); } catch(e) {} solvePlayer = null; }
-    if (hostPlayer) { try { hostPlayer.destroy(); } catch(e) {} hostPlayer = null; }
+    if (player) { try { player.destroy(); } catch (e) { } player = null; }
+    if (solvePlayer) { try { solvePlayer.destroy(); } catch (e) { } solvePlayer = null; }
+    if (hostPlayer) { try { hostPlayer.destroy(); } catch (e) { } hostPlayer = null; }
 
     unsubscribes.forEach(unsub => unsub());
     unsubscribes = [];
@@ -389,7 +394,7 @@ window.loadMyQuizzes = async () => {
     if (!user) return;
     const q = collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes');
     const unsub = onSnapshot(q, (snap) => {
-        myQuizzes = snap.docs.map(d => ({...d.data(), id: d.id}));
+        myQuizzes = snap.docs.map(d => ({ ...d.data(), id: d.id }));
         renderMyQuizzes();
     }, (error) => {
         console.error("My quizzes error:", error);
@@ -404,7 +409,7 @@ window.loadSoloResults = async () => {
     renderSoloResults();
     const q = getTeacherSoloResultsCollection(user.uid);
     const unsub = onSnapshot(q, (snap) => {
-        soloResults = snap.docs.map(d => ({...d.data(), id: d.id}));
+        soloResults = snap.docs.map(d => ({ ...d.data(), id: d.id }));
         renderSoloResults();
     }, (error) => {
         console.error("Solo results error:", error);
@@ -523,9 +528,9 @@ window.openLiveHost = async () => {
             activeQ: -1, status: 'waiting', hostId: user.uid, pin: sessionID, timestamp: serverTimestamp(),
             totalPoints: totalPoints
         });
-    } catch(e) {
+    } catch (e) {
         console.error(e);
-        if(e.code === 'permission-denied') window.showRulesHelpModal();
+        if (e.code === 'permission-denied') window.showRulesHelpModal();
     }
 
     participantStorageMode = 'session';
@@ -612,7 +617,7 @@ window.deleteParticipant = async (id) => {
         window.showMessage("Участникът е премахнат.", "info");
     } catch (e) {
         console.error(e);
-        if(e.code === 'permission-denied') window.showRulesHelpModal();
+        if (e.code === 'permission-denied') window.showRulesHelpModal();
         else window.showMessage("Грешка при изтриване.", "error");
     }
 };
@@ -690,7 +695,7 @@ function renderHostDashboard() {
         <tr class="border-b transition-all hover:bg-slate-50 animate-pop">
             <td class="py-3 px-3 font-black text-xs sm:text-sm">
                 <div class="flex items-center gap-2">
-                    <span class="text-slate-300 w-5">${idx+1}.</span>
+                    <span class="text-slate-300 w-5">${idx + 1}.</span>
                     <span class="text-lg">${p.avatar || '👤'}</span>
                     <span class="truncate">${p.name}</span>
                 </div>
@@ -713,8 +718,8 @@ window.finishLiveSession = async () => {
         document.getElementById('export-buttons-container').classList.remove('hidden');
         document.getElementById('export-buttons-container').classList.add('flex');
         window.showMessage("Сесията приключи!");
-    } catch(e) {
-        if(e.code === 'permission-denied') window.showRulesHelpModal();
+    } catch (e) {
+        if (e.code === 'permission-denied') window.showRulesHelpModal();
     }
 };
 
@@ -729,9 +734,9 @@ function getResultsData() {
     currentQuiz.q.forEach((_, idx) => header.push(`Въпрос ${idx + 1}`));
     data.push(header);
 
-    [...lastFetchedParticipants].sort((a,b)=>b.score-a.score).forEach((p,i) => {
+    [...lastFetchedParticipants].sort((a, b) => b.score - a.score).forEach((p, i) => {
         let row = [
-            (i+1),
+            (i + 1),
             p.name,
             p.score
         ];
@@ -899,7 +904,7 @@ window.exportSoloResultsExcel = () => {
     const wsStudents = XLSX.utils.aoa_to_sheet(studentRows);
     XLSX.utils.book_append_sheet(wb, wsStudents, "По_Ученици");
 
-    const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
     XLSX.writeFile(wb, `solo_results_${timestamp}.xlsx`);
     window.showMessage("Индивидуалният отчет е изтеглен.");
 };
@@ -939,7 +944,7 @@ window.exportExcel = () => {
     XLSX.utils.book_append_sheet(wb, wsAnalytics, "Анализ_Клас");
 
     const now = new Date();
-    const timestamp = now.toISOString().slice(0,19).replace(/[-:T]/g,"");
+    const timestamp = now.toISOString().slice(0, 19).replace(/[-:T]/g, "");
 
     XLSX.writeFile(wb, `results_${sessionID}_${timestamp}.xlsx`);
     window.showMessage("Excel файлът е генериран! (вкл. анализ по въпроси)");
@@ -1004,7 +1009,7 @@ window.exportPDF = () => {
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
 
-    const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
     doc.save(`results_${sessionID}_${timestamp}.pdf`);
     window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси).");
 };
@@ -1105,12 +1110,12 @@ window.joinLiveSession = async () => {
                 document.getElementById('waiting-status-text').innerText = "Изчакай въпрос...";
             }
         }, (error) => {
-            if(error.code === 'permission-denied') window.showRulesHelpModal();
+            if (error.code === 'permission-denied') window.showRulesHelpModal();
         });
         unsubscribes.push(unsub);
     } catch (e) {
         console.error(e);
-        if(e.code === 'permission-denied') window.showRulesHelpModal();
+        if (e.code === 'permission-denied') window.showRulesHelpModal();
         else window.showMessage("Грешка при свързване.", "error");
     }
 };
@@ -1273,7 +1278,7 @@ window.renderLiveQuestionUI = (q) => {
         document.getElementById('sticky-btn-container').classList.remove('hidden');
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOpenConfirm;
     } else if (q.type === 'ordering') {
-        const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
+        const shuffled = q.options.map((o, i) => ({ o, i })).sort(() => Math.random() - 0.5);
         container.innerHTML = `
             <div id="client-ordering-pool" class="grid grid-cols-1 gap-2 mb-4">${shuffled.map(item => `<button onclick="window.pickLiveOrder(this, ${item.i})" class="client-order-item w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 text-sm">${item.o}</button>`).join('')}</div>
             <div id="client-ordering-result" class="flex flex-wrap justify-center gap-2 mb-4 min-h-[40px] border-t pt-4"></div>
@@ -1281,7 +1286,7 @@ window.renderLiveQuestionUI = (q) => {
         ` + btnHtml;
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOrderingConfirm;
     } else if (q.type === 'timeline') {
-        const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
+        const shuffled = q.options.map((o, i) => ({ o, i })).sort(() => Math.random() - 0.5);
         container.innerHTML = `
             <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 font-black text-xs flex items-center gap-2">
                 <i data-lucide="clock" class="w-4 h-4"></i> Подредете събитията в хронологичен ред
@@ -1295,7 +1300,7 @@ window.renderLiveQuestionUI = (q) => {
     } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
         const defaultValue = (q.min + q.max) / 2;
         const isTimeline = (q.type === 'timeline-slider');
-        
+
         let sliderHtml = '';
         if (isTimeline) {
             const years = [];
@@ -1303,8 +1308,8 @@ window.renderLiveQuestionUI = (q) => {
             for (let y = q.min; y <= q.max; y += step) {
                 years.push(Math.round(y));
             }
-            if (years[years.length-1] < q.max) years.push(Math.round(q.max));
-            
+            if (years[years.length - 1] < q.max) years.push(Math.round(q.max));
+
             sliderHtml = `
                 <div class="relative pt-6 pb-2">
                     <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-300 via-amber-500 to-amber-700 rounded-full"></div>
@@ -1332,15 +1337,15 @@ window.renderLiveQuestionUI = (q) => {
                 </div>
             `;
         }
-        
+
         container.innerHTML = sliderHtml + btnHtml;
-        
+
         const slider = document.getElementById('c-numeric-slider');
         const display = document.getElementById('c-numeric-value');
         slider.addEventListener('input', () => {
             display.innerText = slider.value;
         });
-        
+
         document.getElementById('sticky-btn-container').classList.remove('hidden');
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveNumericConfirm;
     }
@@ -1419,7 +1424,7 @@ window.startIndividual = async () => {
     if (!auth.currentUser) {
         try {
             await signInAnonymously(auth);
-        } catch(e) { console.error("Auto-login failed", e); }
+        } catch (e) { console.error("Auto-login failed", e); }
     }
 
     window.switchScreen('solve');
@@ -1437,30 +1442,32 @@ window.initSolvePlayer = () => {
     solvePlayer = new YT.Player('solve-player', {
         videoId: currentQuiz.v, width: '100%', height: '100%',
         playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1 },
-        events: { 'onStateChange': (e) => {
-            if (e.data === YT.PlayerState.ENDED) {
-                window.finishSoloGame();
-            }
-            if (e.data === YT.PlayerState.PLAYING) {
-                const m = setInterval(() => {
-                    if (!solvePlayer?.getCurrentTime) return;
-                    const cur = Math.floor(solvePlayer.getCurrentTime());
-                    const duration = solvePlayer.getDuration();
+        events: {
+            'onStateChange': (e) => {
+                if (e.data === YT.PlayerState.ENDED) {
+                    window.finishSoloGame();
+                }
+                if (e.data === YT.PlayerState.PLAYING) {
+                    const m = setInterval(() => {
+                        if (!solvePlayer?.getCurrentTime) return;
+                        const cur = Math.floor(solvePlayer.getCurrentTime());
+                        const duration = solvePlayer.getDuration();
 
-                    const qIdx = currentQuiz.q.findIndex((q, i) => cur >= q.time && i > currentQIndex);
-                    if (qIdx !== -1) {
-                        currentQIndex = qIdx;
-                        window.triggerSoloQuestion(currentQuiz.q[qIdx]);
-                    }
+                        const qIdx = currentQuiz.q.findIndex((q, i) => cur >= q.time && i > currentQIndex);
+                        if (qIdx !== -1) {
+                            currentQIndex = qIdx;
+                            window.triggerSoloQuestion(currentQuiz.q[qIdx]);
+                        }
 
-                    if (duration > 0 && cur >= duration - 1) {
-                        clearInterval(m);
-                        window.finishSoloGame();
-                    }
-                }, 500);
-                activeIntervals.push(m);
+                        if (duration > 0 && cur >= duration - 1) {
+                            clearInterval(m);
+                            window.finishSoloGame();
+                        }
+                    }, 500);
+                    activeIntervals.push(m);
+                }
             }
-        }}
+        }
     });
 };
 
@@ -1488,7 +1495,7 @@ window.triggerSoloQuestion = (q) => {
         container.innerHTML = `<input type="text" id="s-open-answer" placeholder="Отговор..." class="w-full p-6 bg-white/10 border border-white/20 rounded-2xl font-black text-white text-xl outline-none mb-4 text-center"><button onclick="window.submitSoloOpen()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>`;
     } else if (q.type === 'ordering') {
         window.userOrderSequence = [];
-        const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
+        const shuffled = q.options.map((o, i) => ({ o, i })).sort(() => Math.random() - 0.5);
         container.innerHTML = `
             <div id="solo-ordering-pool" class="space-y-2">${shuffled.map(item => `<button onclick="window.pickSoloOrder(this, ${item.i})" class="solo-order-item w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white">${item.o}</button>`).join('')}</div>
             <div id="solo-ordering-result" class="min-h-[48px] border-t border-white/20 mt-4 pt-4 flex flex-wrap gap-2"></div>
@@ -1498,7 +1505,7 @@ window.triggerSoloQuestion = (q) => {
             </div>`;
     } else if (q.type === 'timeline') {
         window.userOrderSequence = [];
-        const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
+        const shuffled = q.options.map((o, i) => ({ o, i })).sort(() => Math.random() - 0.5);
         container.innerHTML = `
             <div class="mb-4 p-3 bg-amber-500/20 border border-amber-400 rounded-xl text-amber-200 font-black text-xs flex items-center gap-2">
                 <i data-lucide="clock" class="w-4 h-4"></i> Подредете събитията в хронологичен ред
@@ -1513,7 +1520,7 @@ window.triggerSoloQuestion = (q) => {
     } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
         const defaultValue = (q.min + q.max) / 2;
         const isTimeline = (q.type === 'timeline-slider');
-        
+
         let sliderHtml = '';
         if (isTimeline) {
             const years = [];
@@ -1521,8 +1528,8 @@ window.triggerSoloQuestion = (q) => {
             for (let y = q.min; y <= q.max; y += step) {
                 years.push(Math.round(y));
             }
-            if (years[years.length-1] < q.max) years.push(Math.round(q.max));
-            
+            if (years[years.length - 1] < q.max) years.push(Math.round(q.max));
+
             sliderHtml = `
                 <div class="relative pt-6 pb-2">
                     <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-300 via-amber-500 to-amber-700 rounded-full"></div>
@@ -1550,11 +1557,11 @@ window.triggerSoloQuestion = (q) => {
                 </div>
             `;
         }
-        
+
         container.innerHTML = sliderHtml + `
             <button onclick="window.submitSoloNumeric()" class="w-full mt-6 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>
         `;
-        
+
         const slider = document.getElementById('s-numeric-slider');
         const display = document.getElementById('s-numeric-value');
         slider.addEventListener('input', () => {
@@ -1686,8 +1693,8 @@ window.finishSoloGame = async () => {
                 teacherOwnerId: currentQuizOwnerId,
                 teacherOwnerEmail: currentQuiz.ownerEmail || currentQuiz.teacherEmail || null
             });
-        } catch(e) {
-            if(e.code === 'permission-denied') window.showRulesHelpModal();
+        } catch (e) {
+            if (e.code === 'permission-denied') window.showRulesHelpModal();
         }
     }
 };
@@ -1707,10 +1714,14 @@ window.loadEditorVideo = (isEdit = false) => {
     currentVideoId = id;
     document.getElementById('editor-view').classList.remove('hidden');
     document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
-    player = new YT.Player('player', { videoId: id, events: { 'onReady': () => {
-        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
-        activeIntervals.push(i);
-    }}});
+    player = new YT.Player('player', {
+        videoId: id, events: {
+            'onReady': () => {
+                const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
+                activeIntervals.push(i);
+            }
+        }
+    });
     if (!isEdit) { questions = []; editingQuizId = null; }
     renderEditorList();
 };
@@ -1840,7 +1851,7 @@ window.saveQuestion = () => {
     } else {
         questions.push(qData);
     }
-    questions.sort((a,b) => a.time - b.time);
+    questions.sort((a, b) => a.time - b.time);
     renderEditorList();
     document.getElementById('modal-q').classList.add('hidden');
     editingQuestionIndex = null;
@@ -1878,7 +1889,7 @@ window.editQuestionContent = (index) => {
         const stepInput = document.getElementById('m-numeric-step');
         const correctInput = document.getElementById('m-numeric-correct');
         const toleranceInput = document.getElementById('m-numeric-tolerance');
-        
+
         if (minInput) minInput.value = q.min ?? 0;
         if (maxInput) maxInput.value = q.max ?? 100;
         if (stepInput) stepInput.value = q.step ?? 1;
@@ -1920,12 +1931,12 @@ function renderEditorList() {
 
 window.adjustTime = (index, delta) => {
     questions[index].time = Math.max(0, questions[index].time + delta);
-    questions.sort((a,b) => a.time - b.time);
+    questions.sort((a, b) => a.time - b.time);
     renderEditorList();
     if (player && typeof player.seekTo === 'function') player.seekTo(questions[index].time, true);
 };
 
-window.deleteEditorQuestion = (i) => { if (confirm("Изтриване на въпроса?")) { questions.splice(i,1); renderEditorList(); } };
+window.deleteEditorQuestion = (i) => { if (confirm("Изтриване на въпроса?")) { questions.splice(i, 1); renderEditorList(); } };
 
 window.saveQuizToLibrary = async () => {
     if (!user) return;
@@ -1989,7 +2000,7 @@ window.deleteQuiz = async (id) => {
     }
 };
 // --- Разрешаване на достъп до хранилище (за блокирани ученици) ---
-window.requestStorageAccess = async function() {
+window.requestStorageAccess = async function () {
     try {
         if (document.requestStorageAccess) {
             await document.requestStorageAccess();
@@ -2003,16 +2014,17 @@ window.requestStorageAccess = async function() {
         window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
     }
 };
+
 // --- АДМИНИСТРАТОРСКИ ПАНЕЛ (само за admin) ---
-window.openAdminPanel = async function() {
-  try {
-    window.showMessage("📊 Зареждам статистики...", "info");
-    
-    const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
-    const result = await getAdminStatsFunc();
-    const stats = result.data;
-    
-    const message = `📊 АДМИН СТАТИСТИКИ:
+window.openAdminPanel = async function () {
+    try {
+        window.showMessage("📊 Зареждам статистики...", "info");
+        // Тук се използва httpsCallable, който вече е правилно импортиран
+        const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
+        const result = await getAdminStatsFunc();
+        const stats = result.data;
+
+        const message = `📊 АДМИН СТАТИСТИКИ:
 ━━━━━━━━━━━━━━━━━━━━━
 👥 Учители: ${stats.totalTeachers}
 📚 Уроци: ${stats.totalQuizzes}
@@ -2020,15 +2032,16 @@ window.openAdminPanel = async function() {
 🎬 Сесии на живо: ${stats.totalSessions}
 👩‍🎓 Участници (общо): ${stats.totalParticipants}
 ━━━━━━━━━━━━━━━━━━━━━`;
-    
-    window.showMessage(message, "info", 15000); // показва се 15 секунди
-  } catch (error) {
-    console.error("Admin panel error:", error);
-    window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
-  }
+
+        window.showMessage(message, "info", 15000); // показва се 15 секунди
+    } catch (error) {
+        console.error("Admin panel error:", error);
+        window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
+    }
 };
+
 // --- YT API ---
-window.onYouTubeIframeAPIReady = function() {
+window.onYouTubeIframeAPIReady = function () {
     isYTReady = true;
     console.log("YouTube API Ready");
 };
