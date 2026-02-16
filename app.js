@@ -4,7 +4,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence
 import { httpsCallable, getFunctions } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 
 // ==========================================
-// ВГРАДЕНИ UTILS (ПОМОЩНИ ФУНКЦИИ)
+// ВГРАДЕНИ UTILS
 // ==========================================
 const AVATARS = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵'];
 
@@ -32,11 +32,9 @@ function parseScoreValue(scoreStr) {
     return { score: Number(parts[0]) || 0, total: Number(parts[1]) || 0 };
 }
 
-// Подобрена функция за декодиране с почистване на интервали
 function decodeQuizCode(code) {
     try {
         if (!code) return null;
-        // Премахваме нови редове и интервали, които може да са попаднали при копиране
         const cleanCode = code.trim().replace(/\s/g, '');
         return JSON.parse(decodeURIComponent(escape(atob(cleanCode))));
     } catch (e) {
@@ -600,6 +598,7 @@ window.openLiveHost = async () => {
     
     const resultsBody = document.getElementById('host-results-body');
     if (resultsBody) {
+        // Намираме обвивката (wrapper), създадена в новата HTML структура
         const sidebar = resultsBody.closest('.w-full'); 
         
         let qrContainer = document.getElementById('host-qr-container');
@@ -1157,6 +1156,7 @@ window.exportPDF = async () => {
 // ==========================================
 // STUDENT CLIENT LOGIC
 // ==========================================
+// [CRITICAL FIX] Robust Join Function
 window.joinLiveSession = async () => {
     // 1. Get elements safely
     const pinEl = document.getElementById('live-pin');
@@ -1863,7 +1863,7 @@ window.submitSoloFinal = (isCorrect) => {
         if (solvePlayer && typeof solvePlayer.playVideo === 'function') {
             solvePlayer.playVideo(); 
         }
-    }, 1000);
+    }, 1000); // Increased delay to see message
 };
 
 window.submitSoloMultiple = () => {
@@ -1973,6 +1973,7 @@ window.finishSoloGame = async () => {
     
     const finalScoreEl = document.getElementById('res-score');
     if (finalScoreEl) {
+        // Display score and message. Assuming res-score is a block element.
         finalScoreEl.innerHTML = `<div class="text-4xl mb-2">${scoreText}</div><div class="text-xl text-slate-500">${feedbackText}</div>`;
     }
 
@@ -1984,6 +1985,7 @@ window.finishSoloGame = async () => {
     // Проверка за потребител и ID на собственика
     let currentUser = auth.currentUser || user;
     if (!currentUser) {
+        // Опит за ре-логин ако потребителят е изгубен
         try {
             await signInAnonymously(auth);
             currentUser = auth.currentUser;
@@ -2286,4 +2288,4 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         }, 1000);
     }
-}
+});
