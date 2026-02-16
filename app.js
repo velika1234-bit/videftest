@@ -13,7 +13,6 @@ import {
     getTimestampMs,
     shuffleArray
 } from './js/utils.js';
-
 iimport {
     db,
     auth,
@@ -27,9 +26,7 @@ iimport {
     getParticipantRef,
     getLegacyParticipantsCollection,
     getLegacyParticipantRef
- 
-} from './js/firebase.js';
-
+ } from './js/firebase.js';
 // --- Останали Firebase импорти (от CDN) ---
 import {
     collection, doc, setDoc, getDoc, onSnapshot,
