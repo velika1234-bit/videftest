@@ -18,7 +18,7 @@ import {
     auth,
     functions,
     finalAppId,
-    legacyAppId,             // това вече ще съществува
+    legacyAppId,    // това вече ще съществува
     getTeacherSoloResultsCollection,
     getTeacherQuizzesCollection,
     getSessionRefById,
@@ -26,7 +26,7 @@ import {
     getParticipantRef,
     getLegacyParticipantsCollection,
     getLegacyParticipantRef
- } from './js/firebase.js';
+} from './js/firebase.js';
 // --- Останали Firebase импорти (от CDN) ---
 import {
     collection, doc, setDoc, getDoc, onSnapshot,
