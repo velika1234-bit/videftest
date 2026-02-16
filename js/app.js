@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-// ПОПРАВКА: Добавено е 'getFunctions' в импорта по-долу, защото се използва на ред 24
 import { httpsCallable, getFunctions } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
@@ -21,7 +20,6 @@ const finalAppId = 'videoquiz-ultimate-live';
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-// Сега това ще работи, защото getFunctions е импортирано
 const functions = getFunctions(app, 'us-central1');
 
 // --- GLOBAL STATE ---
@@ -88,7 +86,7 @@ onAuthStateChanged(auth, async (u) => {
         if (document.getElementById('solo-results-body')) renderSoloResults();
 
         // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
-        const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; // ⚠️ Увери се, че това е правилното ID
+        const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
         const adminBtn = document.getElementById('admin-panel-btn');
         if (adminBtn) {
             if (user && user.uid === ADMIN_UID) {
@@ -403,12 +401,16 @@ window.loadMyQuizzes = async () => {
     unsubscribes.push(unsub);
 };
 
+// --- ПОПРАВКА: По-устойчиво зареждане на резултати ---
 window.loadSoloResults = async () => {
     if (!user) return;
     soloResults = [];
     renderSoloResults();
+    console.log("Fetching solo results for user:", user.uid);
     const q = getTeacherSoloResultsCollection(user.uid);
+    
     const unsub = onSnapshot(q, (snap) => {
+        console.log("Solo results snapshot found docs:", snap.size);
         soloResults = snap.docs.map(d => ({ ...d.data(), id: d.id }));
         renderSoloResults();
     }, (error) => {
@@ -454,11 +456,18 @@ function renderMyQuizzes() {
     if (window.lucide) lucide.createIcons();
 }
 
+// --- ПОПРАВКА: По-устойчиво рендиране на таблицата ---
 function renderSoloResults() {
     const body = document.getElementById('solo-results-body');
     if (!body) return;
 
-    const sortedResults = [...soloResults].sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp));
+    // Сейфти сортиране - ако timestamp липсва, ползваме 0
+    const sortedResults = [...soloResults].sort((a, b) => {
+        const tA = a.timestamp ? getTimestampMs(a.timestamp) : 0;
+        const tB = b.timestamp ? getTimestampMs(b.timestamp) : 0;
+        return tB - tA;
+    });
+
     const summaryEl = document.getElementById('solo-results-summary');
     if (summaryEl) {
         const totalAttempts = sortedResults.length;
@@ -474,19 +483,27 @@ function renderSoloResults() {
             : 'Все още няма резултати за този профил.';
     }
 
-    body.innerHTML = sortedResults.map(r => `
+    body.innerHTML = sortedResults.map(r => {
+        // Проверка за липсващи данни
+        const sName = r.studentName || 'Анонимен';
+        const qTitle = r.quizTitle || 'Без име';
+        const dateStr = r.timestamp ? window.formatDate(r.timestamp) : 'Няма дата';
+        const scoreStr = r.score || '0/0';
+        
+        return `
         <tr class="border-b text-[10px] sm:text-xs hover:bg-slate-50">
-            <td class="py-3 px-4 font-black text-slate-700">${r.studentName}</td>
-            <td class="py-3 px-4 text-slate-500 truncate max-w-[120px]">${r.quizTitle}</td>
-            <td class="py-3 px-4 text-slate-400 font-mono">${window.formatDate(r.timestamp)}</td>
-            <td class="py-3 px-4 text-right"><span class="bg-indigo-100 text-indigo-600 px-2 py-1 rounded-lg font-black">${r.score}</span></td>
+            <td class="py-3 px-4 font-black text-slate-700">${sName}</td>
+            <td class="py-3 px-4 text-slate-500 truncate max-w-[120px]">${qTitle}</td>
+            <td class="py-3 px-4 text-slate-400 font-mono">${dateStr}</td>
+            <td class="py-3 px-4 text-right"><span class="bg-indigo-100 text-indigo-600 px-2 py-1 rounded-lg font-black">${scoreStr}</span></td>
             <td class="py-3 px-4 text-center">
                 <button onclick="window.deleteSoloResult('${r.id}')" class="text-rose-400 hover:text-rose-600 p-2 rounded-lg hover:bg-rose-50 transition-all" title="Изтрий резултат">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
             </td>
-        </tr>
-    `).join('') || '<tr><td colspan="5" class="py-6 text-center text-slate-300 italic">Няма данни</td></tr>';
+        </tr>`;
+    }).join('') || '<tr><td colspan="5" class="py-6 text-center text-slate-300 italic">Няма данни</td></tr>';
+    
     if (window.lucide) lucide.createIcons();
 }
 
@@ -1633,116 +1650,6 @@ window.submitSoloFinal = (isCorrect) => {
     document.getElementById('ind-overlay').classList.add('hidden');
     document.getElementById('ind-overlay').classList.remove('flex');
     setTimeout(() => { solvePlayer?.playVideo(); }, 500);
-};
-
-window.submitSoloMultiple = () => {
-    const checked = Array.from(document.querySelectorAll('input[name="s-multiple"]:checked')).map(el => parseInt(el.value));
-    const isCorrect = JSON.stringify(checked.sort()) === JSON.stringify(currentQuiz.q[currentQIndex].correct.sort());
-    window.submitSoloFinal(isCorrect);
-};
-
-window.submitSoloOpen = () => {
-    const ans = document.getElementById('s-open-answer')?.value.trim().toLowerCase();
-    window.submitSoloFinal(ans === currentQuiz.q[currentQIndex].correct);
-};
-
-window.submitSolo = (v) => window.submitSoloFinal(v === currentQuiz.q[currentQIndex].correct);
-
-window.submitSoloOrdering = () => {
-    const q = currentQuiz.q[currentQIndex];
-    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) return window.showMessage('Подредете всички елементи!', 'error');
-    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
-    window.submitSoloFinal(isCorrect);
-};
-
-window.pickSoloOrder = (el, originalIdx) => {
-    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
-    if (window.userOrderSequence.includes(originalIdx)) return;
-    window.userOrderSequence.push(originalIdx);
-    el.classList.add('opacity-40', 'pointer-events-none');
-    const result = document.getElementById('solo-ordering-result');
-    if (result) {
-        const chip = document.createElement('div');
-        chip.className = 'px-3 py-1 rounded-lg bg-indigo-600 text-white text-xs font-black';
-        chip.innerText = `${window.userOrderSequence.length}. ${el.innerText}`;
-        result.appendChild(chip);
-    }
-};
-
-window.clearSoloOrdering = () => {
-    window.userOrderSequence = [];
-    const result = document.getElementById('solo-ordering-result');
-    if (result) result.innerHTML = '';
-    document.querySelectorAll('.solo-order-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
-};
-
-window.pickSoloTimeline = (el, originalIdx) => {
-    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
-    if (window.userOrderSequence.includes(originalIdx)) return;
-    window.userOrderSequence.push(originalIdx);
-    el.classList.add('opacity-40', 'pointer-events-none');
-    const result = document.getElementById('solo-timeline-result');
-    if (result) {
-        const chip = document.createElement('div');
-        chip.className = 'px-3 py-1 rounded-lg bg-amber-600 text-white text-xs font-black flex items-center gap-1';
-        chip.innerHTML = `<i data-lucide="clock" class="w-3 h-3"></i> ${window.userOrderSequence.length}. ${el.innerText}`;
-        result.appendChild(chip);
-        if (window.lucide) lucide.createIcons();
-    }
-};
-
-window.clearSoloTimeline = () => {
-    window.userOrderSequence = [];
-    const result = document.getElementById('solo-timeline-result');
-    if (result) result.innerHTML = '';
-    document.querySelectorAll('.solo-timeline-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
-};
-
-window.submitSoloTimeline = () => {
-    const q = currentQuiz.q[currentQIndex];
-    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) {
-        return window.showMessage('Подредете всички събития!', 'error');
-    }
-    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
-    window.submitSoloFinal(isCorrect);
-};
-
-window.finishSoloGame = async () => {
-    if (soloGameFinished) return;
-    soloGameFinished = true;
-
-    stopSpeechReader();
-    window.switchScreen('finish');
-    const totalPossible = currentQuiz.q.reduce((acc, q) => acc + (q.points || 1), 0);
-    const scoreText = `${scoreCount} / ${totalPossible}`;
-    const finalScoreEl = document.getElementById('res-score');
-    if (finalScoreEl) finalScoreEl.innerText = scoreText;
-
-    const currentUser = auth.currentUser || user;
-    if (isDiscussionMode) {
-        window.showMessage("Режим обсъждане: резултатът не се записва в облака.", "info");
-        return;
-    }
-    if (currentUser) {
-        const resId = `${currentUser.uid}_${currentQuiz.v.replace(/[^a-zA-Z0-9]/g, '')}_${Date.now()}`;
-        if (!currentQuizOwnerId) {
-            window.showMessage("Кодът няма валиден собственик (учител). Резултатът не е записан.", "error");
-            return;
-        }
-        try {
-            await setDoc(doc(getTeacherSoloResultsCollection(currentQuizOwnerId), resId), {
-                studentName: studentNameValue,
-                quizTitle: currentQuiz.title || "Индивидуален тест",
-                score: scoreText,
-                timestamp: serverTimestamp(),
-                userId: currentUser.uid,
-                teacherOwnerId: currentQuizOwnerId,
-                teacherOwnerEmail: currentQuiz.ownerEmail || currentQuiz.teacherEmail || null
-            });
-        } catch (e) {
-            if (e.code === 'permission-denied') window.showRulesHelpModal();
-        }
-    }
 };
 
 // --- EDITOR ENGINE ---
