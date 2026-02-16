@@ -1,28 +1,13 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { db, auth, finalAppId } from './firebase.js';
 // --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
 
 // Backward-compatible globals (за стари извиквания window.formatDate/window.formatTime)
 window.formatDate = formatDate;
 window.formatTime = formatTime;
-// --- FIREBASE CONFIGURATION ---
-const firebaseConfig = {
-    apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
-    authDomain: "videoquiz-ultimate.firebaseapp.com",
-    projectId: "videoquiz-ultimate",
-    storageBucket: "videoquiz-ultimate.firebasestorage.app",
-    messagingSenderId: "793138692820",
-    appId: "1:793138692820:web:8ee2418d28d47fca6bf141"
-};
-
-const finalAppId = 'videoquiz-ultimate-live';
 const legacyAppId = 'videoquiz-ultimate';
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
 // --- GLOBAL STATE ---
 let user = null;
 let lastAuthUid = null;
@@ -51,11 +36,12 @@ let participantStorageMode = 'legacy';
 let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
-let currentAccessLevel = 'tester';
+let currentAccessLevel = 'guest';
 const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
 const MASTER_TEACHER_CODE = "vilidaf76";
 const MASTER_TESTER_CODE = "tester3";
 const ACCESS_LIMITS = {
+    guest: 0,
     tester: 3,
     teacher: 20,
     admin: Number.POSITIVE_INFINITY
@@ -88,15 +74,17 @@ const safeSetHTML = (id, html) => {
 
 const resolveAccessLevel = (profile = {}, uid = null) => {
     if (uid && uid === ADMIN_UID) return 'admin';
+    if (!profile || Object.keys(profile).length === 0) return null;
     const level = String(profile?.accessLevel || '').toLowerCase();
     if (level === 'admin' || level === 'teacher' || level === 'tester') return level;
     const role = String(profile?.role || '').toLowerCase();
     if (role === 'admin') return 'admin';
     if (role === 'teacher') return 'teacher';
-    return 'tester';
+    if (role === 'tester') return 'tester';
+    return null;
 };
 
-const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.tester;
+const getLessonLimit = () => ACCESS_LIMITS[currentAccessLevel] ?? ACCESS_LIMITS.guest;
 
 const canCreateMoreLessons = () => {
     const limit = getLessonLimit();
@@ -110,10 +98,10 @@ const updateAccessUI = () => {
     const createBtn = document.getElementById('create-lesson-btn');
     const shareNote = document.getElementById('share-code-note');
     const limit = getLessonLimit();
-    const levelLabels = { tester: 'Тестер', teacher: 'Учител', admin: 'Администратор' };
+    const levelLabels = { guest: 'Без достъп', tester: 'Тестер', teacher: 'Учител', admin: 'Администратор' };
 
     if (titleEl) {
-        titleEl.innerText = `Права: ${levelLabels[currentAccessLevel] || 'Тестер'}`;
+        titleEl.innerText = `Права: ${levelLabels[currentAccessLevel] || 'Без достъп'}`;
     }
     if (detailsEl) {
         detailsEl.innerText = Number.isFinite(limit)
@@ -141,15 +129,6 @@ onAuthStateChanged(auth, async (u) => {
         soloResults = [];
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
-        // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
-const adminBtn = document.getElementById('admin-panel-btn');
-if (adminBtn) {
-  if (incomingUid === ADMIN_UID) {
-    adminBtn.classList.remove('hidden');
-  } else {
-    adminBtn.classList.add('hidden');
-  }
-}
     }
     lastAuthUid = incomingUid;
     user = u;
@@ -162,11 +141,23 @@ if (adminBtn) {
         if(debugUidEl) debugUidEl.innerText = uidDisplay;
 
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
+        const legacyProfileRef = doc(db, 'artifacts', legacyAppId, 'users', user.uid, 'settings', 'profile');
         try {
-            const profileSnap = await getDoc(profileRef);
-            const profileData = profileSnap.exists() ? profileSnap.data() : {};
-            currentAccessLevel = resolveAccessLevel(profileData, incomingUid);
+            const [profileSnap, legacyProfileSnap] = await Promise.all([
+                getDoc(profileRef),
+                getDoc(legacyProfileRef)
+            ]);
+            const profileData = profileSnap.exists() ? profileSnap.data() : null;
+            const legacyProfileData = legacyProfileSnap.exists() ? legacyProfileSnap.data() : null;
+            currentAccessLevel = resolveAccessLevel(profileData, incomingUid)
+                || resolveAccessLevel(legacyProfileData, incomingUid)
+                || 'guest';
             isTeacher = currentAccessLevel === 'teacher' || currentAccessLevel === 'admin' || currentAccessLevel === 'tester';
+
+            const adminBtn = document.getElementById('admin-panel-btn');
+            if (adminBtn) {
+                adminBtn.classList.toggle('hidden', !(incomingUid === ADMIN_UID || currentAccessLevel === 'admin'));
+            }
 
             if (isTeacher) {
                 window.loadMyQuizzes();
@@ -175,15 +166,19 @@ if (adminBtn) {
                 if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
                     window.switchScreen('teacher-dashboard');
                 }
-            } else if (!isAnon) {
+            } else {
                 window.switchScreen('welcome');
             }
         } catch (e) {
             console.error("Cloud Access Error:", e);
-            if (e.code === 'permission-denied') window.showRulesHelpModal();
+            if (e.code === 'permission-denied' && (incomingUid === ADMIN_UID || currentAccessLevel === 'admin')) {
+                window.showRulesHelpModal();
+            }
         }
     } else {
-        currentAccessLevel = 'tester';
+        const adminBtn = document.getElementById('admin-panel-btn');
+        if (adminBtn) adminBtn.classList.add('hidden');
+        currentAccessLevel = 'guest';
         updateAccessUI();
         window.switchScreen('welcome');
     }
@@ -2229,7 +2224,7 @@ window.requestStorageAccess = async function() {
     }
 };
 // --- АДМИНИСТРАТОРСКИ ПАНЕЛ (само за admin) ---
-const isCurrentUserAdmin = () => !!user && user.uid === ADMIN_UID;
+const isCurrentUserAdmin = () => !!user && (user.uid === ADMIN_UID || currentAccessLevel === 'admin');
 
 const setAdminLoading = (isLoading) => {
     const loadingEl = document.getElementById('admin-loading');
@@ -2322,9 +2317,20 @@ window.loadAdminDashboard = async function() {
         renderAdminStats(filteredRows);
     } catch (error) {
         const isPermissionError = error?.code === 'permission-denied';
+        const activeUid = auth.currentUser?.uid || user?.uid || null;
+        const isAdminUid = !!activeUid && activeUid === ADMIN_UID;
+        const hasAdminAccess = isCurrentUserAdmin();
+
         if (isPermissionError) {
-            console.warn('Admin dashboard blocked by Firestore rules:', error);
-            window.showRulesHelpModal();
+            console.warn('Admin dashboard blocked by Firestore rules or non-admin account:', {
+                uid: activeUid,
+                isAdminUid,
+                hasAdminAccess,
+                code: error?.code
+            });
+            if (hasAdminAccess) {
+                window.showRulesHelpModal();
+            }
         } else {
             console.error('Admin dashboard error:', error);
         }
@@ -2332,12 +2338,14 @@ window.loadAdminDashboard = async function() {
         const body = document.getElementById('admin-teachers-body');
         if (body) {
             body.innerHTML = isPermissionError
-                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп по Firestore rules. Публикувайте правилата от помощния модал.</td></tr>'
+                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп. Влезте с admin акаунт; ако сте admin, публикувайте Firestore правилата.</td></tr>'
                 : '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
         }
         window.showMessage(
             isPermissionError
-                ? '❌ Липсват Firestore права за админ панела. Отворен е Rules модал с точния код.'
+                ? (hasAdminAccess
+                    ? '❌ Няма админ достъп: публикувайте правилата. Отворен е Rules модал.'
+                    : '❌ Няма админ достъп: влезте с admin акаунт.')
                 : '❌ Неуспешно зареждане на админ данни.',
             'error'
         );

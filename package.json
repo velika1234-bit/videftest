@@ -1,0 +1,16 @@
+{
+  "name": "videotest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "firebase.js",
+  "scripts": {
+    "build:tailwind": "tailwindcss -i ./css/tailwind.input.css -o ./css/tailwind.generated.css --minify"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}
