@@ -1,14 +1,13 @@
 import { collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { db, auth, finalAppId } from './firebase.js';
-// --- Импортиране на helper функции от utils.js ---
 import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
 
-// Backward-compatible globals (за стари извиквания window.formatDate/window.formatTime)
 window.formatDate = formatDate;
 window.formatTime = formatTime;
+
 const legacyAppId = 'videoquiz-ultimate';
-// --- GLOBAL STATE ---
+
 let user = null;
 let lastAuthUid = null;
 let isTeacher = false;
@@ -37,9 +36,9 @@ let rulesModalShown = false;
 let sopModeEnabled = false;
 let isDiscussionMode = false;
 let currentAccessLevel = 'guest';
+
 const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
 const MASTER_TEACHER_CODE = "vilidaf76";
-const MASTER_TESTER_CODE = "tester3";
 const ACCESS_LIMITS = {
     guest: 0,
     tester: 3,
@@ -47,7 +46,6 @@ const ACCESS_LIMITS = {
     admin: Number.POSITIVE_INFINITY
 };
 
-// Helper functions for Firestore paths
 const getTeacherSoloResultsCollection = (teacherId) => collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
 const getTeacherQuizzesCollection = (teacherId, appId = finalAppId) => collection(db, 'artifacts', appId, 'users', teacherId, 'my_quizzes');
 const getSessionRefById = (id) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
@@ -60,8 +58,6 @@ const getSessionsCollection = () => collection(db, 'artifacts', finalAppId, 'pub
 
 window.tempLiveSelection = null;
 
-
-// --- SAFE DOM HELPERS ---
 const safeSetText = (id, text) => {
     const el = document.getElementById(id);
     if (el) el.innerText = text;
@@ -121,7 +117,6 @@ const updateAccessUI = () => {
     }
 };
 
-// --- AUTH LOGIC ---
 onAuthStateChanged(auth, async (u) => {
     const incomingUid = u?.uid || null;
     if (lastAuthUid !== incomingUid) {
@@ -198,158 +193,6 @@ setTimeout(() => {
 
 initAuth();
 
-setTimeout(() => {
-    const anyVisible = Array.from(document.querySelectorAll('#app > div')).some(div => !div.classList.contains('hidden'));
-    if (!anyVisible) {
-        console.warn('No visible screen detected. Recovering to welcome screen.');
-        window.switchScreen('welcome');
-    }
-}, 1200);
-
-// --- HELPER FUNCTIONS ---
-window.resolveTeacherUidFromCode = async (decoded) => {
-    if (!decoded) return null;
-    const explicitOwnerId = decoded.ownerId || decoded.teacherId || null;
-    if (explicitOwnerId) return explicitOwnerId;
-    const ownerEmail = (decoded.ownerEmailNormalized || decoded.ownerEmail || decoded.teacherEmail || '').trim().toLowerCase();
-    if (!ownerEmail) return null;
-    try {
-        const normalizedQ = query(
-            collectionGroup(db, 'profile'),
-            where('role', '==', 'teacher'),
-            where('emailNormalized', '==', ownerEmail)
-        );
-        const normalizedSnap = await getDocs(normalizedQ);
-        if (normalizedSnap.size === 1) {
-            return normalizedSnap.docs[0].ref.parent.parent?.id || null;
-        }
-        if (normalizedSnap.size > 1) {
-            console.error('Ambiguous teacher match by emailNormalized:', ownerEmail);
-            return null;
-        }
-        const fallbackQ = query(
-            collectionGroup(db, 'profile'),
-            where('role', '==', 'teacher'),
-            where('email', '==', ownerEmail)
-        );
-        const fallbackSnap = await getDocs(fallbackQ);
-        if (fallbackSnap.size === 1) {
-            return fallbackSnap.docs[0].ref.parent.parent?.id || null;
-        }
-        if (fallbackSnap.size > 1) {
-            console.error('Ambiguous teacher match by email:', ownerEmail);
-            return null;
-        }
-    } catch (e) {
-        console.error('Owner email lookup failed:', e);
-    }
-    return null;
-};
-
-
-
-const normalizeQuizPayload = (rawQuiz) => {
-    if (!rawQuiz || typeof rawQuiz !== 'object') return null;
-    const videoId = rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
-    const questionList = Array.isArray(rawQuiz.q)
-        ? rawQuiz.q
-        : (Array.isArray(rawQuiz.questions) ? rawQuiz.questions : []);
-
-    if (!videoId || questionList.length === 0) return null;
-
-    return {
-        ...rawQuiz,
-        v: videoId,
-        q: questionList,
-        questions: questionList,
-        title: rawQuiz.title || rawQuiz.name || 'Без име'
-    };
-
-};
-
-const normalizeStoredQuiz = (rawQuiz) => {
-    if (!rawQuiz || typeof rawQuiz !== 'object') return null;
-    const normalized = normalizeQuizPayload(rawQuiz);
-    const videoId = normalized?.v || rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
-    const questionList = normalized?.q
-        || (Array.isArray(rawQuiz.questions) ? rawQuiz.questions : (Array.isArray(rawQuiz.q) ? rawQuiz.q : []));
-
-    return {
-        ...rawQuiz,
-        id: rawQuiz.id,
-        title: normalized?.title || rawQuiz.title || rawQuiz.name || 'Без име',
-        v: videoId,
-        questions: questionList,
-        q: questionList
-    };
-};
-
-window.switchScreen = (name) => {
-
-    if (name === 'create' && !editingQuizId && !canCreateMoreLessons()) {
-        const limit = getLessonLimit();
-        window.showMessage(`Достигнахте лимита от ${limit} урока за вашите права.`, 'error');
-        name = 'teacher-dashboard';
-    }
-
-    document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
-    const target = document.getElementById('screen-' + name);
-    if (target) {
-        target.classList.remove('hidden');
-    } else {
-        const fallback = document.getElementById('screen-welcome');
-        fallback?.classList.remove('hidden');
-        console.warn(`Unknown screen: ${name}. Falling back to welcome.`);
-    }
-
-    if (player) { try { player.destroy(); } catch(e) {} player = null; }
-    if (solvePlayer) { try { solvePlayer.destroy(); } catch(e) {} solvePlayer = null; }
-    if (hostPlayer) { try { hostPlayer.destroy(); } catch(e) {} hostPlayer = null; }
-
-    unsubscribes.forEach(unsub => unsub());
-    unsubscribes = [];
-    activeIntervals.forEach(i => clearInterval(i));
-    activeIntervals = [];
-    currentParticipantRef = null;
-
-    if (name === 'teacher-dashboard' && user) {
-        window.loadMyQuizzes();
-        window.loadSoloResults();
-        updateAccessUI();
-    }
-    if (window.lucide) lucide.createIcons();
-    window.scrollTo(0, 0);
-};
-
-window.showMessage = (text, type = 'info') => {
-    const container = document.getElementById('msg-container');
-    if (!container) return;
-    const msg = document.createElement('div');
-    msg.className = `p-4 rounded-2xl shadow-2xl font-black text-white animate-pop mb-3 flex items-center gap-3 ${type === 'error' ? 'bg-rose-500' : 'bg-indigo-600'}`;
-    msg.innerHTML = `<i data-lucide="${type === 'error' ? 'alert-circle' : 'info'}" class="w-5 h-5"></i><span>${text}</span>`;
-    container.appendChild(msg);
-    if (window.lucide) lucide.createIcons();
-    setTimeout(() => {
-        msg.classList.add('opacity-0');
-        setTimeout(() => msg.remove(), 500);
-    }, 4000);
-};
-
-window.quitHostSession = () => {
-    if (confirm("Това ще прекъсне сесията и ще спре таймерите. Сигурни ли сте?")) {
-        window.switchScreen('teacher-dashboard');
-    }
-};
-
-// --- PERMISSION ERROR HANDLER ---
-window.showRulesHelpModal = () => {
-    if (rulesModalShown) return;
-    rulesModalShown = true;
-    document.getElementById('modal-rules-help').classList.remove('hidden');
-    document.getElementById('modal-rules-help').classList.add('flex');
-};
-
-// --- AUTH HANDLERS ---
 window.toggleAuthMode = () => {
     authMode = authMode === 'login' ? 'register' : 'login';
     const title = document.getElementById('auth-title');
@@ -386,24 +229,23 @@ window.handleAuthSubmit = async () => {
     try {
         if (authMode === 'register') {
             const code = document.getElementById('auth-teacher-code').value.trim();
-            let registerAccessLevel = null;
-            if (code === MASTER_TEACHER_CODE) registerAccessLevel = 'teacher';
-            if (code === MASTER_TESTER_CODE) registerAccessLevel = 'tester';
-            if (!registerAccessLevel) {
-                return window.showMessage("Грешен код за достъп!", "error");
-            }
+            if (code !== MASTER_TEACHER_CODE) return window.showMessage("Грешен код за учител!", "error");
+
+            const name = document.getElementById('auth-name').value.trim();
+            if (!name) return window.showMessage("Моля, въведете имената си!", "error");
 
             try {
                 const cred = await createUserWithEmailAndPassword(auth, email, pass);
                 await setDoc(doc(db, 'artifacts', finalAppId, 'users', cred.user.uid, 'settings', 'profile'), {
                     role: 'teacher',
-                    accessLevel: registerAccessLevel,
                     email: email,
                     emailNormalized: email.toLowerCase(),
-                    activatedAt: serverTimestamp()
+                    name: name,
+                    status: 'pending',
+                    registeredAt: serverTimestamp()
                 });
-                window.showMessage("Успешна регистрация!");
-                window.switchScreen('teacher-dashboard');
+                window.showMessage("Регистрацията е успешна! Чака одобрение от администратор.", "info");
+                window.switchScreen('welcome');
             } catch (innerError) {
                 if (innerError.code === 'auth/operation-not-allowed') {
                     console.warn("Email auth disabled, falling back to anonymous teacher profile.");
@@ -414,14 +256,15 @@ window.handleAuthSubmit = async () => {
                     }
                     await setDoc(doc(db, 'artifacts', finalAppId, 'users', anonUser.uid, 'settings', 'profile'), {
                         role: 'teacher',
-                        accessLevel: 'tester',
                         email: email + " (Guest)",
                         emailNormalized: email.toLowerCase(),
-                        activatedAt: serverTimestamp(),
+                        name: name,
+                        status: 'pending',
+                        registeredAt: serverTimestamp(),
                         isFallback: true
                     });
-                    window.showMessage("Режим 'Гост-Учител' (Операцията не е позволена, проверете Settings).", "info");
-                    window.switchScreen('teacher-dashboard');
+                    window.showMessage("Регистрацията е успешна! Чака одобрение от администратор.", "info");
+                    window.switchScreen('welcome');
                 } else if (innerError.code === 'permission-denied') {
                     window.showRulesHelpModal();
                 } else {
@@ -460,7 +303,6 @@ window.handleLogout = async () => {
     }, 1000);
 };
 
-// --- IMPORT / EXPORT LOGIC ---
 window.openImportModal = () => {
     document.getElementById('import-code-input').value = "";
     document.getElementById('modal-import').classList.remove('hidden');
@@ -488,13 +330,9 @@ window.submitImport = () => {
 
 window.saveImportedQuiz = async (data) => {
     if (!user) return;
-    if (!canCreateMoreLessons()) {
-        const limit = getLessonLimit();
-        return window.showMessage(`Достигнахте лимита от ${limit} урока за вашите права.`, 'error');
-    }
     window.showMessage("Импортиране...");
     try {
-        await addDoc(getTeacherQuizzesCollection(user.uid), {
+        await addDoc(collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes'), {
             title: data.title + " (Импортиран)", v: data.v, questions: data.q, createdAt: serverTimestamp()
         });
         window.showMessage("Урокът е добавен!", "info");
@@ -504,65 +342,17 @@ window.saveImportedQuiz = async (data) => {
     }
 };
 
-// --- FIREBASE DATA OPS ---
 window.loadMyQuizzes = async () => {
-    if (!user) { updateAccessUI(); return; }
-
-    const normalizeStoredQuizSafe = typeof normalizeStoredQuiz === 'function'
-        ? normalizeStoredQuiz
-        : (rawQuiz) => {
-            if (!rawQuiz || typeof rawQuiz !== 'object') return null;
-            const videoId = rawQuiz.v || rawQuiz.videoId || rawQuiz.youtubeId || null;
-            const questionList = Array.isArray(rawQuiz.questions)
-                ? rawQuiz.questions
-                : (Array.isArray(rawQuiz.q) ? rawQuiz.q : []);
-            return {
-                ...rawQuiz,
-                id: rawQuiz.id,
-                title: rawQuiz.title || rawQuiz.name || 'Без име',
-                v: videoId,
-                questions: questionList,
-                q: questionList
-            };
-        };
-
-    const snapshotsBySource = new Map();
-    const rebuildAndRender = () => {
-        const mergedByKey = new Map();
-        snapshotsBySource.forEach((docs, sourceAppId) => {
-            docs.forEach((quizDoc) => {
-                const normalized = normalizeStoredQuizSafe(quizDoc);
-                if (!normalized?.id) return;
-                mergedByKey.set(`${sourceAppId}:${normalized.id}`, normalized);
-            });
-        });
-        myQuizzes = Array.from(mergedByKey.values());
+    if (!user) return;
+    const q = collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes');
+    const unsub = onSnapshot(q, (snap) => {
+        myQuizzes = snap.docs.map(d => ({...d.data(), id: d.id}));
         renderMyQuizzes();
-        updateAccessUI();
-    };
-
-    const attachListener = (appId) => {
-        const q = getTeacherQuizzesCollection(user.uid, appId);
-        const unsub = onSnapshot(q, (snap) => {
-            snapshotsBySource.set(appId, snap.docs.map((d) => ({ ...d.data(), id: d.id })));
-            rebuildAndRender();
-        }, (error) => {
-            console.error(`My quizzes error (${appId}):`, error);
-            if (error.code === 'permission-denied') {
-                if (appId === legacyAppId) {
-                    console.warn('Legacy app scope is not readable with current Firestore rules. Continuing with current scope only.');
-                    return;
-                }
-                window.showRulesHelpModal();
-            }
-        });
-        unsubscribes.push(unsub);
-    };
-
-    attachListener(finalAppId);
-    if (legacyAppId !== finalAppId) {
-        attachListener(legacyAppId);
-    }
+    }, (error) => {
+        console.error("My quizzes error:", error);
+        if (error.code === 'permission-denied') window.showRulesHelpModal();
+    });
+    unsubscribes.push(unsub);
 };
 
 window.loadSoloResults = async () => {
@@ -640,7 +430,7 @@ function renderSoloResults() {
         <tr class="border-b text-[10px] sm:text-xs hover:bg-slate-50">
             <td class="py-3 px-4 font-black text-slate-700">${r.studentName}</td>
             <td class="py-3 px-4 text-slate-500 truncate max-w-[120px]">${r.quizTitle}</td>
-            <td class="py-3 px-4 text-slate-400 font-mono">${formatDate(r.timestamp)}</td>
+            <td class="py-3 px-4 text-slate-400 font-mono">${window.formatDate(r.timestamp)}</td>
             <td class="py-3 px-4 text-right"><span class="bg-indigo-100 text-indigo-600 px-2 py-1 rounded-lg font-black">${r.score}</span></td>
             <td class="py-3 px-4 text-center">
                 <button onclick="window.deleteSoloResult('${r.id}')" class="text-rose-400 hover:text-rose-600 p-2 rounded-lg hover:bg-rose-50 transition-all" title="Изтрий резултат">
@@ -652,13 +442,9 @@ function renderSoloResults() {
     if (window.lucide) lucide.createIcons();
 }
 
-// --- LIVE HOST LOGIC ---
 window.startHostFromLibrary = async (id) => {
     const quiz = myQuizzes.find(q => q.id === id);
     if (!quiz) return window.showMessage("Грешка при зареждане на урока.", "error");
-    if (!quiz.v || !Array.isArray(quiz.questions) || quiz.questions.length === 0) {
-        return window.showMessage("Този урок е в стар/непълен формат. Отворете Редакция и запазете отново.", "error");
-    }
     currentQuiz = { v: quiz.v, q: quiz.questions, title: quiz.title };
     currentQuizOwnerId = user?.uid || null;
     await window.openLiveHost();
@@ -745,7 +531,7 @@ window.initHostPlayer = () => {
     document.getElementById('host-video-container').innerHTML = '<div id="host-video"></div>';
     hostPlayer = new YT.Player('host-video', {
         videoId: currentQuiz.v,
-        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1, 'origin': window.location.origin },
+        playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1 },
         events: {
             'onReady': (event) => event.target.playVideo(),
             'onStateChange': async (e) => {
@@ -753,7 +539,7 @@ window.initHostPlayer = () => {
                     const i = setInterval(async () => {
                         if (!hostPlayer?.getCurrentTime) return;
                         const cur = Math.floor(hostPlayer.getCurrentTime());
-                        document.getElementById('host-timer').innerText = formatTime(cur);
+                        document.getElementById('host-timer').innerText = window.formatTime(cur);
                         const qIdx = currentQuiz.q.findIndex(q => Math.abs(q.time - cur) <= 1);
                         if (qIdx !== -1 && qIdx !== liveActiveQIdx) {
                             liveActiveQIdx = qIdx;
@@ -888,7 +674,6 @@ window.finishLiveSession = async () => {
     }
 };
 
-// --- EXCEL & PRINT LOGIC ---
 function getResultsData() {
     if (!currentQuiz || !lastFetchedParticipants) return [];
 
@@ -995,85 +780,6 @@ function getClassQuestionStats() {
     };
 }
 
-function getSoloResultsExportModel() {
-    const sortedResults = [...soloResults].sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp));
-    const attempts = sortedResults.map((r, idx) => {
-        const parsed = parseScoreValue(r.score);
-        const pct = parsed.total > 0 ? Math.round((parsed.score / parsed.total) * 100) : 0;
-        return {
-            idx: idx + 1,
-            studentName: r.studentName || '-',
-            quizTitle: r.quizTitle || '-',
-            dateTime: formatDate(r.timestamp),
-            scoreLabel: r.score || '-',
-            score: parsed.score,
-            total: parsed.total,
-            pct
-        };
-    });
-
-    const totalAttempts = attempts.length;
-    const totalScore = attempts.reduce((a, r) => a + r.score, 0);
-    const totalMax = attempts.reduce((a, r) => a + r.total, 0);
-    const avgPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
-
-    const byStudent = new Map();
-    attempts.forEach((r) => {
-        const prev = byStudent.get(r.studentName) || { attempts: 0, score: 0, total: 0 };
-        prev.attempts += 1;
-        prev.score += r.score;
-        prev.total += r.total;
-        byStudent.set(r.studentName, prev);
-    });
-
-    const studentSummary = Array.from(byStudent.entries()).map(([name, v]) => ({
-        name,
-        attempts: v.attempts,
-        scoreLabel: `${v.score}/${v.total}`,
-        pct: v.total > 0 ? Math.round((v.score / v.total) * 100) : 0
-    })).sort((a, b) => b.pct - a.pct || b.attempts - a.attempts);
-
-    return {
-        attempts,
-        studentSummary,
-        summary: { totalAttempts, totalScore, totalMax, avgPct }
-    };
-}
-
-window.exportSoloResultsExcel = () => {
-    const model = getSoloResultsExportModel();
-    if (model.attempts.length === 0) return window.showMessage("Няма индивидуални резултати за експорт.", "error");
-
-    const wb = XLSX.utils.book_new();
-
-    const summaryRows = [
-        ["ОБЩО ОПИТИ", model.summary.totalAttempts],
-        ["ОБЩ РЕЗУЛТАТ", `${model.summary.totalScore}/${model.summary.totalMax}`],
-        ["СРЕДЕН УСПЕХ", `${model.summary.avgPct}%`],
-        []
-    ];
-    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-    XLSX.utils.book_append_sheet(wb, wsSummary, "Обобщение");
-
-    const attemptsRows = [
-        ["#", "Ученик", "Урок", "Дата/Час", "Точки", "% Успех"],
-        ...model.attempts.map(r => [r.idx, r.studentName, r.quizTitle, r.dateTime, r.scoreLabel, `${r.pct}%`])
-    ];
-    const wsAttempts = XLSX.utils.aoa_to_sheet(attemptsRows);
-    XLSX.utils.book_append_sheet(wb, wsAttempts, "Индивидуални_Опити");
-
-    const studentRows = [
-        ["Ученик", "Опити", "Точки", "% Успех"],
-        ...model.studentSummary.map(r => [r.name, r.attempts, r.scoreLabel, `${r.pct}%`])
-    ];
-    const wsStudents = XLSX.utils.aoa_to_sheet(studentRows);
-    XLSX.utils.book_append_sheet(wb, wsStudents, "По_Ученици");
-
-    const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
-    XLSX.writeFile(wb, `solo_results_${timestamp}.xlsx`);
-    window.showMessage("Индивидуалният отчет е изтеглен.");
-};
-
 window.exportExcel = () => {
     const data = getResultsData();
     if (data.length === 0) return window.showMessage("Няма данни за експорт.", "error");
@@ -1176,10 +882,9 @@ window.exportPDF = () => {
 
     const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
     doc.save(`results_${sessionID}_${timestamp}.pdf`);
-    window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси).");
+    window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси)");
 };
 
-// --- STUDENT CLIENT LOGIC ---
 window.joinLiveSession = async () => {
     const pin = document.getElementById('live-pin').value.trim();
     studentNameValue = document.getElementById('live-student-name').value.trim();
@@ -1432,11 +1137,18 @@ window.renderLiveQuestionUI = (q) => {
         `).join('') + btnHtml;
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveMultipleConfirm;
     } else if (q.type === 'boolean') {
+        const boolOptions = ['ДА', 'НЕ'];
+        const shuffledBool = [0, 1].sort(() => Math.random() - 0.5);
+        const shuffledOptions = shuffledBool.map(i => boolOptions[i]);
+        const shuffledCorrectIndex = shuffledBool.findIndex(i => i === (q.correct ? 0 : 1));
+        
         container.innerHTML = `
-         <div class="grid grid-cols-2 gap-4">
-            <button onclick="window.selectLiveOption(this, true)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-emerald-600 text-xl">ДА</button>
-            <button onclick="window.selectLiveOption(this, false)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-rose-600 text-xl">НЕ</button>
-         </div>` + btnHtml;
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="window.selectLiveOption(this, ${shuffledBool[0] === 0})" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-emerald-600 text-xl">${shuffledOptions[0]}</button>
+                <button onclick="window.selectLiveOption(this, ${shuffledBool[1] === 0})" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-rose-600 text-xl">${shuffledOptions[1]}</button>
+            </div>` + btnHtml;
+        
+        window.currentLiveQ.shuffledCorrect = shuffledCorrectIndex;
         document.getElementById('btn-submit-live-unified').onclick = window.submitLiveSingleConfirm;
     } else if (q.type === 'open') {
         container.innerHTML = `<input type="text" id="c-open-answer" placeholder="Напишете отговор..." class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-base outline-none text-center mb-4">` + btnHtml;
@@ -1571,7 +1283,6 @@ const readQuestionWithSpeech = (text) => {
     }
 };
 
-// --- SOLO LOGIC ---
 window.startIndividual = async () => {
     const pinCode = document.getElementById('ind-quiz-code').value.trim();
     const decoded = window.decodeQuizCode(pinCode);
@@ -1580,9 +1291,7 @@ window.startIndividual = async () => {
     sopModeEnabled = !!document.getElementById('ind-sop-mode')?.checked;
     const name = isDiscussionMode ? "Обсъждане" : prompt("Вашето име:");
     if (!name) return;
-    const normalizedQuiz = normalizeQuizPayload(decoded);
-    if (!normalizedQuiz) return window.showMessage("Кодът е невалиден или непълен (липсва видео/въпроси).", 'error');
-    studentNameValue = name; currentQuiz = normalizedQuiz;
+    studentNameValue = name; currentQuiz = decoded;
     currentQuizOwnerId = await window.resolveTeacherUidFromCode(decoded);
     if (!currentQuizOwnerId) {
         return window.showMessage("Кодът не е свързан еднозначно с учител. Генерирайте нов код от профила на учителя.", 'error');
@@ -1607,8 +1316,15 @@ window.initSolvePlayer = () => {
     }
     document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
     solvePlayer = new YT.Player('solve-player', {
-        videoId: currentQuiz.v, width: '100%', height: '100%',
-        playerVars: { 'autoplay': 1, 'controls': 1, 'rel': 0, 'playsinline': 1, 'origin': window.location.origin },
+        videoId: currentQuiz.v, 
+        width: '100%', 
+        height: '100%',
+        playerVars: { 
+            'autoplay': 1, 
+            'controls': 1, 
+            'rel': 0, 
+            'playsinline': 1
+        },
         events: { 'onStateChange': (e) => {
             if (e.data === YT.PlayerState.ENDED) {
                 window.finishSoloGame();
@@ -1651,13 +1367,34 @@ window.triggerSoloQuestion = (q) => {
     container.innerHTML = '';
 
     if (q.type === 'single') {
-        container.innerHTML = q.options.map((o, i) => `<button onclick="window.submitSolo(${i})" class="w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white hover:bg-white/20 transition-all text-sm">${o}</button>`).join('');
+        const optionsWithIdx = q.options.map((text, idx) => ({ text, idx }));
+        const shuffled = optionsWithIdx.sort(() => Math.random() - 0.5);
+        const shuffledOptions = shuffled.map(item => item.text);
+        const shuffledCorrectIndex = shuffled.findIndex(item => item.idx === q.correct);
+        
+        container.innerHTML = shuffledOptions.map((o, i) => `
+            <button onclick="window.submitSolo(${i}, ${shuffledCorrectIndex})" class="w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white hover:bg-white/20 transition-all text-sm">${o}</button>
+        `).join('');
+        
     } else if (q.type === 'multiple') {
         container.innerHTML = q.options.map((o, i) => `<label class="flex items-center gap-4 w-full p-4 bg-white/10 border border-white/20 rounded-2xl font-black text-white cursor-pointer text-sm mb-2"><input type="checkbox" name="s-multiple" value="${i}" class="w-5 h-5"> ${o}</label>`).join('') + `<button onclick="window.submitSoloMultiple()" class="w-full mt-4 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>`;
+        
     } else if (q.type === 'boolean') {
-        container.innerHTML = `<div class="grid grid-cols-2 gap-4"><button onclick="window.submitSolo(true)" class="p-10 bg-emerald-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">ДА</button><button onclick="window.submitSolo(false)" class="p-10 bg-rose-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">НЕ</button></div>`;
+        const boolOptions = ['ДА', 'НЕ'];
+        const shuffledBool = [0, 1].sort(() => Math.random() - 0.5);
+        const shuffledOptions = shuffledBool.map(i => boolOptions[i]);
+        const shuffledCorrectIndex = shuffledBool.findIndex(i => i === (q.correct ? 0 : 1));
+        
+        container.innerHTML = `
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="window.submitSolo(${shuffledBool[0] === 0}, ${shuffledCorrectIndex === 0})" class="p-10 bg-emerald-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">${shuffledOptions[0]}</button>
+                <button onclick="window.submitSolo(${shuffledBool[1] === 0}, ${shuffledCorrectIndex === 1})" class="p-10 bg-rose-500/80 rounded-3xl font-black border border-white/30 text-white text-2xl">${shuffledOptions[1]}</button>
+            </div>
+        `;
+        
     } else if (q.type === 'open') {
         container.innerHTML = `<input type="text" id="s-open-answer" placeholder="Отговор..." class="w-full p-6 bg-white/10 border border-white/20 rounded-2xl font-black text-white text-xl outline-none mb-4 text-center"><button onclick="window.submitSoloOpen()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Изпрати</button>`;
+        
     } else if (q.type === 'ordering') {
         window.userOrderSequence = [];
         const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
@@ -1668,6 +1405,7 @@ window.triggerSoloQuestion = (q) => {
                 <button onclick="window.clearSoloOrdering()" class="py-3 bg-slate-600 rounded-xl font-black text-xs">Изчисти</button>
                 <button onclick="window.submitSoloOrdering()" class="py-3 bg-indigo-600 rounded-xl font-black text-xs">Изпрати</button>
             </div>`;
+            
     } else if (q.type === 'timeline') {
         window.userOrderSequence = [];
         const shuffled = q.options.map((o, i) => ({o, i})).sort(() => Math.random() - 0.5);
@@ -1682,6 +1420,7 @@ window.triggerSoloQuestion = (q) => {
                 <button onclick="window.submitSoloTimeline()" class="py-3 bg-amber-600 rounded-xl font-black text-xs">Изпрати</button>
             </div>`;
         if (window.lucide) lucide.createIcons();
+        
     } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
         const defaultValue = (q.min + q.max) / 2;
         const isTimeline = (q.type === 'timeline-slider');
@@ -1765,7 +1504,9 @@ window.submitSoloOpen = () => {
     window.submitSoloFinal(ans === currentQuiz.q[currentQIndex].correct);
 };
 
-window.submitSolo = (v) => window.submitSoloFinal(v === currentQuiz.q[currentQIndex].correct);
+window.submitSolo = (selectedIndex, correctIndex) => {
+    window.submitSoloFinal(selectedIndex === correctIndex);
+};
 
 window.submitSoloOrdering = () => {
     const q = currentQuiz.q[currentQIndex];
@@ -1864,45 +1605,10 @@ window.finishSoloGame = async () => {
     }
 };
 
-// --- EDITOR ENGINE ---
-const extractYouTubeVideoId = (input) => {
-    if (!input) return null;
-    const value = String(input).trim();
-
-    const directIdMatch = value.match(/^[a-zA-Z0-9_-]{11}$/);
-    if (directIdMatch) return directIdMatch[0];
-
-    try {
-        const parsed = new URL(value);
-        const host = parsed.hostname.replace(/^www\./, '');
-
-        if (host === 'youtu.be') {
-            const id = parsed.pathname.split('/').filter(Boolean)[0];
-            if (id && /^[a-zA-Z0-9_-]{11}$/.test(id)) return id;
-        }
-
-        if (host.endsWith('youtube.com')) {
-            const fromQuery = parsed.searchParams.get('v');
-            if (fromQuery && /^[a-zA-Z0-9_-]{11}$/.test(fromQuery)) return fromQuery;
-
-            const parts = parsed.pathname.split('/').filter(Boolean);
-            const key = parts[0];
-            const candidate = parts[1];
-            if (["embed", "v", "shorts", "live"].includes(key) && candidate && /^[a-zA-Z0-9_-]{11}$/.test(candidate)) {
-                return candidate;
-            }
-        }
-    } catch (_) {
-        // not a full URL -> fallback regex below
-    }
-
-    return value.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/shorts\/|\/live\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1] || null;
-};
-
 window.loadEditorVideo = (isEdit = false) => {
     const url = document.getElementById('yt-url')?.value;
-    const id = extractYouTubeVideoId(url);
-    if (!id) return window.showMessage("Невалиден YouTube линк или ID.", "error");
+    const id = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([\w-]{11})/)?.[1];
+    if (!id) return window.showMessage("Невалиден линк.", "error");
 
     if (!window.YT || !window.YT.Player) {
         window.showMessage("Изчакайте YouTube API...", "error");
@@ -1913,10 +1619,16 @@ window.loadEditorVideo = (isEdit = false) => {
     currentVideoId = id;
     document.getElementById('editor-view').classList.remove('hidden');
     document.getElementById('editor-player-container').innerHTML = '<div id="player"></div>';
-    player = new YT.Player('player', { videoId: id, playerVars: { 'origin': window.location.origin, 'playsinline': 1, 'rel': 0 }, events: { 'onReady': () => {
-        const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = formatTime(player.getCurrentTime()); }, 500);
-        activeIntervals.push(i);
-    }}});
+    player = new YT.Player('player', { 
+        videoId: id, 
+        playerVars: {},
+        events: { 
+            'onReady': () => {
+                const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
+                activeIntervals.push(i);
+            }
+        }
+    });
     if (!isEdit) { questions = []; editingQuizId = null; }
     renderEditorList();
 };
@@ -1928,7 +1640,7 @@ window.openQuestionModal = () => {
     document.getElementById('m-text').value = '';
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
-    document.getElementById('m-time').innerText = formatTime(player.getCurrentTime());
+    document.getElementById('m-time').innerText = window.formatTime(player.getCurrentTime());
     window.updateModalFields();
 };
 
@@ -2059,7 +1771,7 @@ window.editQuestionContent = (index) => {
     document.getElementById('m-text').value = q.text;
     document.getElementById('m-type').value = q.type;
     document.getElementById('m-points').value = q.points || 1;
-    document.getElementById('m-time').innerText = formatTime(q.time);
+    document.getElementById('m-time').innerText = window.formatTime(q.time);
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
     window.updateModalFields();
@@ -2100,7 +1812,7 @@ function renderEditorList() {
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-1">
                     <button onclick="window.adjustTime(${i}, -1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">-</button>
-                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${formatTime(q.time)}</span>
+                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${window.formatTime(q.time)}</span>
                     <button onclick="window.adjustTime(${i}, 1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">+</button>
                 </div>
                 <div class="flex gap-1">
@@ -2135,10 +1847,6 @@ window.deleteEditorQuestion = (i) => { if (confirm("Изтриване на въ
 
 window.saveQuizToLibrary = async () => {
     if (!user) return;
-    if (!editingQuizId && !canCreateMoreLessons()) {
-        const limit = getLessonLimit();
-        return window.showMessage(`Достигнахте лимита от ${limit} урока за вашите права.`, 'error');
-    }
     let title = "";
     const existing = editingQuizId ? myQuizzes.find(x => x.id === editingQuizId) : null;
     title = prompt("Име на урока:", existing?.title || "");
@@ -2148,8 +1856,8 @@ window.saveQuizToLibrary = async () => {
     try {
         const data = { title, v: currentVideoId, questions, updatedAt: serverTimestamp() };
         if (!editingQuizId) data.createdAt = serverTimestamp();
-        if (editingQuizId) await updateDoc(doc(getTeacherQuizzesCollection(user.uid), editingQuizId), data);
-        else await addDoc(getTeacherQuizzesCollection(user.uid), data);
+        if (editingQuizId) await updateDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', editingQuizId), data);
+        else await addDoc(collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes'), data);
         window.showMessage("Урокът е запазен!", "info");
         editingQuizId = null;
         window.switchScreen('teacher-dashboard');
@@ -2184,11 +1892,10 @@ window.editQuiz = (id) => {
     const qData = myQuizzes.find(x => x.id === id);
     if (!qData) return;
     editingQuizId = id;
-    questions = JSON.parse(JSON.stringify(qData.questions || qData.q || []));
-    currentVideoId = qData.v || qData.videoId || qData.youtubeId || '';
+    questions = JSON.parse(JSON.stringify(qData.questions || []));
+    currentVideoId = qData.v;
     window.switchScreen('create');
-    if (!currentVideoId) return window.showMessage("Липсва видео в този урок. Добавете YouTube линк и запазете отново.", "error");
-    document.getElementById('yt-url').value = `https://www.youtube.com/watch?v=${currentVideoId}`;
+    document.getElementById('yt-url').value = `https://www.youtube.com/watch?v=${qData.v}`;
     window.loadEditorVideo(true);
 };
 
@@ -2199,7 +1906,7 @@ window.deleteQuiz = async (id) => {
         window.showMessage("Урокът е изтрит.", "info");
     }
 };
-// --- Разрешаване на достъп до хранилище (за блокирани ученици) ---
+
 window.requestStorageAccess = async function() {
     try {
         if (document.requestStorageAccess) {
@@ -2214,7 +1921,7 @@ window.requestStorageAccess = async function() {
         window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
     }
 };
-// --- АДМИНИСТРАТОРСКИ ПАНЕЛ (само за admin) ---
+
 const isCurrentUserAdmin = () => !!user && (user.uid === ADMIN_UID || currentAccessLevel === 'admin');
 
 const setAdminLoading = (isLoading) => {
@@ -2243,74 +1950,63 @@ const renderAdminStats = (rows = []) => {
     safeSetText('admin-total-live-sessions', String(totals.live));
     safeSetText('admin-total-solo-sessions', String(totals.solo));
 
-    const body = document.getElementById('admin-teachers-body');
-    if (!body) return;
-    body.innerHTML = rows.map((row, idx) => `
-        <tr class="border-b text-xs hover:bg-slate-50">
-            <td class="py-3 px-3 font-black text-slate-500">${idx + 1}</td>
-            <td class="py-3 px-3">
-                <p class="font-bold text-slate-800">${row.name}</p>
-                <p class="text-[10px] text-slate-400">${row.email}</p>
-                <p class="text-[9px] text-slate-300 font-mono mt-1">${row.uid}</p>
-            </td>
-            <td class="py-3 px-3 text-center font-black text-indigo-600">${row.lessons}</td>
-            <td class="py-3 px-3 text-center font-black text-emerald-600">${row.liveSessions}</td>
-            <td class="py-3 px-3 text-center font-black text-amber-600">${row.soloSessions}</td>
+    const tbody = document.getElementById('admin-teachers-body');
+    if (!tbody) return;
+    tbody.innerHTML = rows.map(row => `
+        <tr class="border-b hover:bg-slate-50">
+            <td class="py-3 px-4 font-bold">${row.name}</td>
+            <td class="py-3 px-4">${row.email}</td>
+            <td class="py-3 px-4 text-center">${row.lessons}</td>
+            <td class="py-3 px-4 text-center">${row.liveSessions}</td>
+            <td class="py-3 px-4 text-center">${row.soloSessions}</td>
         </tr>
-    `).join('') || '<tr><td colspan="5" class="py-8 text-center text-slate-300 italic">Няма намерени учители.</td></tr>';
+    `).join('');
 };
 
 window.loadAdminDashboard = async function() {
     if (!isCurrentUserAdmin()) {
-        window.showMessage('Нямате достъп до админ панела.', 'error');
-        window.switchScreen('teacher-dashboard');
+        window.showMessage('Нямате права за админ панела.', 'error');
         return;
     }
 
     setAdminLoading(true);
     try {
-        const teachersQ = query(collectionGroup(db, 'profile'), where('role', '==', 'teacher'));
-        const teachersSnap = await getDocs(teachersQ);
+        const allUsers = await getDocs(collection(db, 'artifacts', finalAppId, 'users'));
+        const teacherRows = await Promise.all(allUsers.docs.map(async (docSnap) => {
+            const teacherUid = docSnap.id;
+            const profileSnap = await getDoc(doc(db, 'artifacts', finalAppId, 'users', teacherUid, 'settings', 'profile'));
+            if (!profileSnap.exists()) return null;
 
-        const teacherRows = await Promise.all(teachersSnap.docs.map(async (teacherDoc) => {
-            const teacherUid = teacherDoc.ref.parent.parent?.id || null;
-            const teacherData = teacherDoc.data() || {};
-            if (!teacherUid) {
-                return null;
-            }
+            const teacherData = profileSnap.data();
+            if (teacherData.role !== 'teacher') return null;
 
-            const [quizzesSnap, legacyQuizzesSnap, soloSnap, liveSnap] = await Promise.all([
-                getDocs(getTeacherQuizzesCollection(teacherUid, finalAppId)),
-                getDocs(getTeacherQuizzesCollection(teacherUid, legacyAppId)),
+            const [quizzesSnap, soloSnap, liveSnap] = await Promise.all([
+                getDocs(getTeacherQuizzesCollection(teacherUid)),
                 getDocs(getTeacherSoloResultsCollection(teacherUid)),
                 getDocs(query(getSessionsCollection(), where('hostId', '==', teacherUid)))
             ]);
 
-            const uniqueQuizIds = new Set([
-                ...quizzesSnap.docs.map((docSnap) => `${finalAppId}:${docSnap.id}`),
-                ...legacyQuizzesSnap.docs.map((docSnap) => `${legacyAppId}:${docSnap.id}`)
-            ]);
-
             return {
                 uid: teacherUid,
-                name: teacherData.name || teacherData.displayName || teacherData.fullName || 'Учител',
+                name: teacherData.name || teacherData.displayName || 'Учител',
                 email: teacherData.email || 'без имейл',
-                lessons: uniqueQuizIds.size,
+                lessons: quizzesSnap.size,
                 liveSessions: liveSnap.size,
                 soloSessions: soloSnap.size
             };
         }));
 
-        const filteredRows = teacherRows
-            .filter(Boolean)
-            .sort((a, b) => (b.lessons + b.liveSessions + b.soloSessions) - (a.lessons + a.liveSessions + a.soloSessions));
-
+        const filteredRows = teacherRows.filter(Boolean).sort((a, b) => (b.lessons + b.liveSessions + b.soloSessions) - (a.lessons + a.liveSessions + a.soloSessions));
         renderAdminStats(filteredRows);
     } catch (error) {
         const isPermissionError = error?.code === 'permission-denied';
+        const activeUid = auth.currentUser?.uid || user?.uid;
+        const isAdminUid = activeUid === ADMIN_UID;
+        const hasAdminAccess = isCurrentUserAdmin();
+
         if (isPermissionError) {
-            console.warn('Admin dashboard blocked by Firestore rules or non-admin account:', error);
-            window.showRulesHelpModal();
+            console.warn('Admin dashboard blocked by Firestore rules:', { uid: activeUid, isAdminUid, hasAdminAccess, code: error?.code });
+            if (hasAdminAccess) window.showRulesHelpModal();
         } else {
             console.error('Admin dashboard error:', error);
         }
@@ -2318,12 +2014,14 @@ window.loadAdminDashboard = async function() {
         const body = document.getElementById('admin-teachers-body');
         if (body) {
             body.innerHTML = isPermissionError
-                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп. Публикувайте правилата и влезте с admin акаунт.</td></tr>'
+                ? '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Няма админ достъп. Влезте с admin акаунт; ако сте admin, публикувайте Firestore правилата.</td></tr>'
                 : '<tr><td colspan="5" class="py-8 text-center text-rose-500 font-bold">Грешка при зареждане. Проверете Firestore правилата за админ достъп.</td></tr>';
         }
         window.showMessage(
             isPermissionError
-                ? '❌ Няма админ достъп: публикувайте правилата и влезте с admin акаунт. Отворен е Rules модал.'
+                ? (hasAdminAccess
+                    ? '❌ Няма админ достъп: публикувайте правилата. Отворен е Rules модал.'
+                    : '❌ Няма админ достъп: влезте с admin акаунт.')
                 : '❌ Неуспешно зареждане на админ данни.',
             'error'
         );
@@ -2339,7 +2037,7 @@ window.openAdminPanel = async function() {
     window.switchScreen('admin');
     await window.loadAdminDashboard();
 };
-// --- YT API ---
+
 window.onYouTubeIframeAPIReady = function() {
     isYTReady = true;
     console.log("YouTube API Ready");
