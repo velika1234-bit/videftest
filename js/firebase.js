@@ -22,8 +22,9 @@ export const auth = getAuth(app);
 export const functions = getFunctions(app, 'us-central1');
 
 export const finalAppId = 'videoquiz-ultimate-live';
-export const legacyAppId = 'videoquiz-ultimate';   // <-- добавено
+export const legacyAppId = 'videoquiz-ultimate';
 
+// Помощни функции за пътища
 export const getTeacherSoloResultsCollection = (teacherId) => 
     collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
 
@@ -44,5 +45,3 @@ export const getLegacyParticipantsCollection = () =>
 
 export const getLegacyParticipantRef = (participantId) => 
     doc(db, 'artifacts', finalAppId, 'public', 'data', 'participants', participantId);
-
-// getActiveParticipantRef НЕ Е ТУК, защото зависи от participantStorageMode в app.js
