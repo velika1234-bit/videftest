@@ -950,7 +950,7 @@ window.exportExcel = () => {
     window.showMessage("Excel файлът е генериран! (вкл. анализ по въпроси)");
 };
 
-window.exportPDF = () => {
+window.exportPDF = async () => {
     const data = getResultsData();
     if (data.length === 0) return window.showMessage("Няма данни за PDF експорт.", "error");
 
@@ -958,16 +958,49 @@ window.exportPDF = () => {
         return window.showMessage("PDF библиотеката не е заредена.", "error");
     }
 
-    const analytics = getClassQuestionStats();
+    // Show loading message
+    window.showMessage("Подготовка на PDF с кирилица...", "info");
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
 
+    // Function to load font
+    const loadFont = async () => {
+        try {
+            // Using a reliable CDN for Roboto Regular which supports Cyrillic
+            const response = await fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf");
+            if (!response.ok) throw new Error("Network response was not ok");
+            const buffer = await response.arrayBuffer();
+            
+            // Convert ArrayBuffer to binary string for jsPDF
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            
+            // Convert to base64
+            const base64String = btoa(binary);
+            
+            doc.addFileToVFS("Roboto-Regular.ttf", base64String);
+            doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+            return true;
+        } catch (error) {
+            console.error("Error loading font:", error);
+            return false;
+        }
+    };
+
+    const fontLoaded = await loadFont();
+    const fontName = fontLoaded ? "Roboto" : "times"; // Fallback to times if fetch fails
+
     const [head, ...body] = data;
 
-    doc.setFont('times', 'bold');
+    doc.setFont(fontName, 'normal'); // Use normal weight as bold might not be loaded
     doc.setFontSize(16);
     doc.text(`VideoQuiz - Резултати от сесия ${sessionID}`, 40, 40);
-    doc.setFont('times', 'normal');
+    
     doc.setFontSize(10);
     doc.text(`Дата: ${new Date().toLocaleString('bg-BG')}`, 40, 58);
 
@@ -976,11 +1009,18 @@ window.exportPDF = () => {
         body: body,
         startY: 72,
         theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak', font: 'times' },
+        styles: { 
+            fontSize: 8, 
+            cellPadding: 4, 
+            overflow: 'linebreak', 
+            font: fontName, // Apply font to table
+            fontStyle: 'normal' 
+        },
         headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255] },
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
 
+    const analytics = getClassQuestionStats();
     const analyticsHead = [['№', 'Въпрос', 'Верни', 'Грешни', 'Без отговор', '% Верни', '% Грешни', 'Първи верен', 'Време (s)']];
     const analyticsBody = analytics.rows.map((r) => [
         r.qIdx + 1,
@@ -995,7 +1035,7 @@ window.exportPDF = () => {
     ]);
 
     const nextY = (doc.lastAutoTable?.finalY || 72) + 16;
-    doc.setFont('times', 'bold');
+    doc.setFont(fontName, 'normal');
     doc.setFontSize(12);
     doc.text(`Обща успеваемост: ${analytics.summary?.classCorrectPct ?? 0}% верни / ${analytics.summary?.classWrongPct ?? 0}% грешни`, 40, nextY);
 
@@ -1004,7 +1044,13 @@ window.exportPDF = () => {
         body: analyticsBody,
         startY: nextY + 8,
         theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak', font: 'times' },
+        styles: { 
+            fontSize: 8, 
+            cellPadding: 4, 
+            overflow: 'linebreak', 
+            font: fontName, 
+            fontStyle: 'normal' 
+        },
         headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
