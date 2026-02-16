@@ -2,10 +2,52 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { httpsCallable, getFunctions } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
-// --- Импортиране на helper функции от utils.js ---
-import { formatTime, formatDate, parseScoreValue, decodeQuizCode, AVATARS, getTimestampMs } from './utils.js';
 
-// --- FIREBASE CONFIGURATION ---
+// ==========================================
+// ВГРАДЕНИ UTILS (ПОМОЩНИ ФУНКЦИИ)
+// ==========================================
+const AVATARS = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵'];
+
+function formatTime(seconds) {
+    const min = Math.floor(seconds / 60);
+    const sec = Math.floor(seconds % 60);
+    return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+}
+
+function formatDate(timestamp) {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleString('bg-BG', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function getTimestampMs(timestamp) {
+    if (!timestamp) return 0;
+    return timestamp.toMillis ? timestamp.toMillis() : (timestamp.seconds * 1000);
+}
+
+function parseScoreValue(scoreStr) {
+    if (!scoreStr) return { score: 0, total: 0 };
+    const parts = scoreStr.split('/');
+    if (parts.length < 2) return { score: 0, total: 0 };
+    return { score: Number(parts[0]) || 0, total: Number(parts[1]) || 0 };
+}
+
+// Подобрена функция за декодиране с почистване на интервали
+function decodeQuizCode(code) {
+    try {
+        if (!code) return null;
+        // Премахваме нови редове и интервали, които може да са попаднали при копиране
+        const cleanCode = code.trim().replace(/\s/g, '');
+        return JSON.parse(decodeURIComponent(escape(atob(cleanCode))));
+    } catch (e) {
+        console.error("Decoding error:", e);
+        return null;
+    }
+}
+
+// ==========================================
+// FIREBASE CONFIGURATION
+// ==========================================
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhbnxygznaGCcdxLBHweZZThezUO314",
     authDomain: "videoquiz-ultimate.firebaseapp.com",
@@ -22,7 +64,9 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const functions = getFunctions(app, 'us-central1');
 
-// --- GLOBAL STATE ---
+// ==========================================
+// GLOBAL STATE
+// ==========================================
 let user = null;
 let lastAuthUid = null;
 let isTeacher = false;
@@ -76,7 +120,9 @@ const safeSetHTML = (id, html) => {
     if (el) el.innerHTML = html;
 };
 
-// --- AUTH LOGIC ---
+// ==========================================
+// AUTH LOGIC
+// ==========================================
 onAuthStateChanged(auth, async (u) => {
     const incomingUid = u?.uid || null;
     
@@ -157,7 +203,9 @@ setTimeout(() => {
 
 initAuth();
 
-// --- HELPER FUNCTIONS ---
+// ==========================================
+// HELPER FUNCTIONS (WINDOW EXPORTS)
+// ==========================================
 window.resolveTeacherUidFromCode = async (decoded) => {
     if (!decoded) return null;
     const explicitOwnerId = decoded.ownerId || decoded.teacherId || null;
@@ -196,7 +244,6 @@ window.resolveTeacherUidFromCode = async (decoded) => {
     }
     return null;
 };
-
 
 window.switchScreen = (name) => {
     document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
@@ -241,7 +288,6 @@ window.quitHostSession = () => {
     }
 };
 
-// --- PERMISSION ERROR HANDLER ---
 window.showRulesHelpModal = () => {
     if (rulesModalShown) return;
     rulesModalShown = true;
@@ -249,7 +295,9 @@ window.showRulesHelpModal = () => {
     document.getElementById('modal-rules-help').classList.add('flex');
 };
 
-// --- AUTH HANDLERS ---
+// ==========================================
+// AUTH HANDLERS
+// ==========================================
 window.toggleAuthMode = () => {
     authMode = authMode === 'login' ? 'register' : 'login';
     const title = document.getElementById('auth-title');
@@ -353,7 +401,9 @@ window.handleLogout = async () => {
     }, 1000);
 };
 
-// --- IMPORT / EXPORT LOGIC ---
+// ==========================================
+// IMPORT / EXPORT LOGIC
+// ==========================================
 window.openImportModal = () => {
     document.getElementById('import-code-input').value = "";
     document.getElementById('modal-import').classList.remove('hidden');
@@ -364,7 +414,7 @@ window.submitImport = () => {
     const code = document.getElementById('import-code-input').value;
     if (!code) return window.showMessage("Моля поставете код.", "error");
 
-    const decoded = window.decodeQuizCode(code);
+    const decoded = decodeQuizCode(code);
     if (!decoded || (!decoded.v || (!decoded.q && !decoded.questions))) {
         return window.showMessage("Кодът е невалиден.", "error");
     }
@@ -393,7 +443,9 @@ window.saveImportedQuiz = async (data) => {
     }
 };
 
-// --- FIREBASE DATA OPS ---
+// ==========================================
+// FIREBASE DATA OPS
+// ==========================================
 window.loadMyQuizzes = async () => {
     if (!user) return;
     const q = collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes');
@@ -465,7 +517,6 @@ function renderSoloResults() {
     const body = document.getElementById('solo-results-body');
     if (!body) return;
 
-    // Сейфти сортиране - ако timestamp липсва, ползваме 0
     const sortedResults = [...soloResults].sort((a, b) => {
         const tA = a.timestamp ? getTimestampMs(a.timestamp) : 0;
         const tB = b.timestamp ? getTimestampMs(b.timestamp) : 0;
@@ -488,10 +539,9 @@ function renderSoloResults() {
     }
 
     body.innerHTML = sortedResults.map(r => {
-        // Проверка за липсващи данни
         const sName = r.studentName || 'Анонимен';
         const qTitle = r.quizTitle || 'Без име';
-        const dateStr = r.timestamp ? window.formatDate(r.timestamp) : 'Няма дата';
+        const dateStr = r.timestamp ? formatDate(r.timestamp) : 'Няма дата';
         const scoreStr = r.score || '0/0';
         
         return `
@@ -511,7 +561,9 @@ function renderSoloResults() {
     if (window.lucide) lucide.createIcons();
 }
 
-// --- LIVE HOST LOGIC ---
+// ==========================================
+// LIVE HOST LOGIC
+// ==========================================
 window.startHostFromLibrary = async (id) => {
     const quiz = myQuizzes.find(q => q.id === id);
     if (!quiz) return window.showMessage("Грешка при зареждане на урока.", "error");
@@ -548,7 +600,6 @@ window.openLiveHost = async () => {
     
     const resultsBody = document.getElementById('host-results-body');
     if (resultsBody) {
-        // Намираме обвивката (wrapper), създадена в новата HTML структура
         const sidebar = resultsBody.closest('.w-full'); 
         
         let qrContainer = document.getElementById('host-qr-container');
@@ -764,7 +815,9 @@ window.finishLiveSession = async () => {
     }
 };
 
-// --- EXCEL & PRINT LOGIC ---
+// ==========================================
+// EXCEL & PRINT LOGIC
+// ==========================================
 function getResultsData() {
     if (!currentQuiz || !lastFetchedParticipants) return [];
 
@@ -1101,8 +1154,9 @@ window.exportPDF = async () => {
     window.showMessage("PDF файлът е генериран (вкл. анализ по въпроси).");
 };
 
-// --- STUDENT CLIENT LOGIC ---
-// [CRITICAL FIX] Robust Join Function
+// ==========================================
+// STUDENT CLIENT LOGIC
+// ==========================================
 window.joinLiveSession = async () => {
     // 1. Get elements safely
     const pinEl = document.getElementById('live-pin');
@@ -1522,11 +1576,12 @@ const readQuestionWithSpeech = (text) => {
     }
 };
 
-// --- SOLO LOGIC (ПОПРАВЕНА ЗА ДЪЛГИ КОДОВЕ) ---
+// ==========================================
+// SOLO LOGIC
+// ==========================================
 window.startIndividual = async () => {
     // 1. Почистване на входа
     const pinInput = document.getElementById('ind-quiz-code');
-    // Премахване на всякакви интервали и нови редове
     const pinCode = pinInput ? pinInput.value.trim().replace(/\s/g, '') : '';
     
     if (!pinCode) return window.showMessage("Моля, въведете код на урока!", 'error');
@@ -1539,7 +1594,7 @@ window.startIndividual = async () => {
         decoded = decodeQuizCode(pinCode);
     } catch (decodeErr) {
         console.error(decodeErr);
-        return window.showMessage("Невалиден формат на кода (грешка при декодиране).", 'error');
+        return window.showMessage("Невалиден формат на кода.", 'error');
     }
 
     if (!decoded) return window.showMessage("Невалиден код на урок.", 'error');
@@ -1643,7 +1698,6 @@ window.initSolvePlayer = () => {
                         const duration = solvePlayer.getDuration();
 
                         // Намиране на следващия въпрос
-                        // Използваме >= за времето и index > currentQIndex, за да не повтаряме
                         const qIdx = currentQuiz.q.findIndex((q, i) => cur >= q.time && i > currentQIndex);
                         
                         if (qIdx !== -1) {
@@ -1679,7 +1733,7 @@ window.triggerSoloQuestion = (q) => {
     const overlay = document.getElementById('ind-overlay');
     overlay.classList.remove('hidden'); 
     overlay.classList.add('flex');
-    // Принудително поставяне най-отгоре (Fix for unclickable buttons)
+    // Принудително поставяне най-отгоре
     overlay.style.zIndex = "9999";
     
     const questionEl = document.getElementById('ind-overlay-q-text');
@@ -1696,7 +1750,7 @@ window.triggerSoloQuestion = (q) => {
     const container = document.getElementById('ind-overlay-options');
     container.innerHTML = '';
 
-    // Генериране на UI за отговорите (същото като преди)
+    // Генериране на UI за отговорите
     if (q.type === 'single') {
         container.innerHTML = q.options.map((o, i) => `<button onclick="window.submitSolo(${i})" class="w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white hover:bg-white/20 transition-all text-sm pointer-events-auto relative z-50">${o}</button>`).join('');
     } else if (q.type === 'multiple') {
@@ -1809,7 +1863,7 @@ window.submitSoloFinal = (isCorrect) => {
         if (solvePlayer && typeof solvePlayer.playVideo === 'function') {
             solvePlayer.playVideo(); 
         }
-    }, 1000); // Increased delay to see message
+    }, 1000);
 };
 
 window.submitSoloMultiple = () => {
@@ -1821,20 +1875,17 @@ window.submitSoloMultiple = () => {
 window.submitSoloOpen = () => {
     const ans = document.getElementById('s-open-answer')?.value.trim().toLowerCase();
     const correct = currentQuiz.q[currentQIndex].correct;
-    // Loose comparison for open answers (string to string)
+    // Loose comparison
     window.submitSoloFinal(String(ans).toLowerCase() === String(correct).toLowerCase());
 };
 
-// Updated robust submitSolo for single choice / boolean
 window.submitSolo = (v) => {
     const q = currentQuiz.q[currentQIndex];
     let correct = q.correct;
     
-    // Normalize types for comparison (handle "1" vs 1 issues)
     if (typeof v === 'string' && typeof correct === 'number') correct = String(correct);
     if (typeof v === 'number' && typeof correct === 'string') v = String(v);
     
-    // For single choice, correct is an index. For boolean, it's true/false.
     window.submitSoloFinal(v === correct);
 };
 
@@ -1922,7 +1973,6 @@ window.finishSoloGame = async () => {
     
     const finalScoreEl = document.getElementById('res-score');
     if (finalScoreEl) {
-        // Display score and message. Assuming res-score is a block element.
         finalScoreEl.innerHTML = `<div class="text-4xl mb-2">${scoreText}</div><div class="text-xl text-slate-500">${feedbackText}</div>`;
     }
 
@@ -1934,7 +1984,6 @@ window.finishSoloGame = async () => {
     // Проверка за потребител и ID на собственика
     let currentUser = auth.currentUser || user;
     if (!currentUser) {
-        // Опит за ре-логин ако потребителят е изгубен
         try {
             await signInAnonymously(auth);
             currentUser = auth.currentUser;
