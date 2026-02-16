@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>VideoQuiz Ultimate - Professional Edition</title>
 
-    <!-- Tailwind CDN (само за разработка – предупреждението е безвредно) -->
+    <!-- Tailwind CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Lucide икони -->
@@ -18,9 +18,6 @@
 
     <!-- YouTube IFrame API (глобално) -->
     <script src="https://www.youtube.com/iframe_api"></script>
-
-    <!-- QR код генератор -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 
     <!-- Персонализирани стилове -->
     <link rel="stylesheet" href="css/style.css">
@@ -84,7 +81,6 @@
                     <button onclick="window.switchScreen('create')" class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-indigo-100">+ Нов Урок</button>
                     <button onclick="window.openImportModal()" class="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-emerald-100">Импорт с код</button>
                     <button onclick="window.handleLogout()" class="bg-slate-100 text-slate-500 px-8 py-4 rounded-2xl font-black uppercase text-[10px]">Изход</button>
-                    <button id="admin-panel-btn" onclick="window.openAdminPanel()" class="hidden bg-purple-700 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-purple-200">📊 Админ панел</button>
                 </div>
             </div>
 
@@ -130,10 +126,6 @@
 
                 <div class="space-y-4 text-left">
                     <div>
-                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Имена (три имена)</label>
-                        <input type="text" id="auth-name" class="w-full p-4 bg-slate-50 rounded-2xl border-2 font-bold outline-none text-sm">
-                    </div>
-                    <div>
                         <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Имейл</label>
                         <input type="email" id="auth-email" class="w-full p-4 bg-slate-50 rounded-2xl border-2 font-bold outline-none text-sm">
                     </div>
@@ -164,7 +156,8 @@
                 <input type="text" id="yt-url" placeholder="YouTube линк..." class="flex-1 w-full p-5 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-600 outline-none font-bold">
                 <div class="flex gap-2 w-full sm:w-auto">
                     <button onclick="window.loadEditorVideo()" class="flex-1 sm:flex-none bg-slate-900 text-white px-8 py-5 rounded-2xl font-black uppercase text-xs">Зареди</button>
-                    <button onclick="window.saveQuizToLibrary()" class="flex-1 sm:flex-none bg-indigo-600 text-white px-8 py-5 rounded-2xl font-black uppercase shadow-xl text-xs">Запази</button>
+                          
+                            <button onclick="window.saveQuizToLibrary()" class="flex-1 sm:flex-none bg-indigo-600 text-white px-8 py-5 rounded-2xl font-black uppercase shadow-xl text-xs">Запази</button>
                 </div>
             </div>
             <div id="editor-view" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -187,12 +180,8 @@
         <!-- Live Host View -->
         <div id="screen-live-host" class="hidden space-y-6 animate-pop">
             <div class="bg-indigo-600 p-8 rounded-[3rem] text-white flex justify-between items-center shadow-2xl shadow-indigo-100">
-                <div>
-                    <span class="text-[10px] font-black uppercase opacity-60">ПИН:</span>
-                    <div class="text-6xl font-black" id="host-pin">----</div>
-                </div>
+                <div><span class="text-[10px] font-black uppercase opacity-60">ПИН:</span><div class="text-6xl font-black" id="host-pin">----</div></div>
                 <div class="flex gap-2 items-center">
-                    <!-- Бутони за експорт (скрити до края на сесията) -->
                     <div id="export-buttons-container" class="hidden gap-2">
                         <button onclick="window.exportExcel()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-4 rounded-xl font-black uppercase text-xs shadow-lg transition-all flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel</button>
                         <button onclick="window.exportPDF()" class="bg-slate-700 hover:bg-slate-800 text-white px-6 py-4 rounded-xl font-black uppercase text-xs shadow-lg transition-all flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> PDF</button>
@@ -204,9 +193,11 @@
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div class="lg:col-span-8">
                     <div id="host-player-area" class="hidden">
-                        <!-- Прогрес бар -->
+                        
+                        <!-- Top Progress Bar -->
                         <div class="mb-6 bg-white p-6 rounded-[2.5rem] shadow-xl shadow-indigo-50 border flex flex-col sm:flex-row items-center gap-6 relative overflow-hidden">
                             <div class="absolute top-0 left-0 w-2 h-full bg-indigo-600"></div>
+                            
                             <div class="flex items-center gap-3 z-10">
                                 <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
                                     <i data-lucide="bar-chart-2" class="w-6 h-6"></i>
@@ -217,15 +208,19 @@
                                     <p id="fastest-reaction-text" class="text-[10px] font-bold text-indigo-500 mt-1">⚡ Най-бърз отговор: няма данни</p>
                                 </div>
                             </div>
+
                             <div class="flex-1 w-full bg-slate-100 h-8 rounded-full overflow-hidden shadow-inner relative">
                                 <div id="class-progress-bar" class="w-full h-full flex transition-opacity duration-500 opacity-0">
                                     <div id="progress-correct" class="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 flex items-center justify-end pr-2 transition-all duration-700 shadow-[0_0_20px_rgba(16,185,129,0.4)]"></div>
                                     <div id="progress-wrong" class="h-full bg-rose-400/20 transition-all duration-700"></div>
                                 </div>
                             </div>
+                            
                             <div class="text-2xl font-black text-slate-800 z-10 min-w-[3.5rem] text-right" id="progress-percent">0%</div>
                         </div>
+
                         <div id="host-video-container" class="video-container border-4 border-white shadow-2xl rounded-[2.5rem]"></div>
+                        
                         <div class="mt-4 bg-white p-6 rounded-[2rem] shadow-sm border">
                             <div class="flex justify-between items-center">
                                 <div class="text-5xl font-black text-indigo-600" id="host-timer">00:00</div>
@@ -233,22 +228,14 @@
                             </div>
                         </div>
                     </div>
-                    <div id="host-setup-area" class="bg-white p-12 rounded-[3rem] text-center shadow-sm border">
-                        <button onclick="window.initHostPlayer()" class="w-full py-6 bg-indigo-600 text-white rounded-2xl font-black uppercase shadow-xl">Започни Видеото</button>
-                    </div>
+                    <div id="host-setup-area" class="bg-white p-12 rounded-[3rem] text-center shadow-sm border"><button onclick="window.initHostPlayer()" class="w-full py-6 bg-indigo-600 text-white rounded-2xl font-black uppercase shadow-xl">Започни Видеото</button></div>
                 </div>
-                <!-- Дясна колона: класиране + QR код -->
-                <div class="lg:col-span-4 bg-white rounded-[3rem] flex flex-col border shadow-sm overflow-hidden min-h-full">
-                    <div class="p-5 border-b font-black uppercase text-[10px] text-slate-500 text-center">Класиране</div>
-                    <div class="flex-1 overflow-y-auto p-3 custom-scrollbar">
-                        <table class="w-full"><tbody id="host-results-body"></tbody></table>
+                <div class="lg:col-span-4 bg-white rounded-[3rem] flex flex-col h-[500px] border shadow-sm overflow-hidden">
+                        <div class="p-5 border-b font-black uppercase text-[10px] text-slate-500 text-center">Класиране</div>
+                        <div class="flex-1 overflow-y-auto p-3 custom-scrollbar">
+                            <table class="w-full"><tbody id="host-results-body"></tbody></table>
+                        </div>
                     </div>
-                    <!-- QR код под класирането (първоначално скрит) -->
-                    <div id="qr-container" class="hidden p-3 border-t border-slate-200 flex flex-col items-center">
-                        <div id="qr-code"></div>
-                        <span class="text-[10px] font-bold text-slate-500 mt-1">Сканирай за бърз вход</span>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -373,13 +360,11 @@ service cloud.firestore {
       }
 
       // 2. ДАННИ НА УЧИТЕЛЯ (Лична папка)
-      // Учителят има пълен контрол над всичко в своята папка
       match /users/{userId}/{document=**} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
       
       // 3. ИЗКЛЮЧЕНИЕ ЗА РЕЗУЛТАТИ (Индивидуален режим)
-      // Позволяваме на учениците (всеки логнат, вкл. анонимно) да ЗАПИСВА резултат
       match /users/{teacherId}/solo_results/{resultId} {
          allow create: if request.auth != null;
       }
@@ -399,24 +384,5 @@ service cloud.firestore {
 
     <!-- Модул с цялата логика -->
     <script type="module" src="js/app.js"></script>
-
-    <!-- Скрипт за автоматично попълване на PIN от QR код -->
-    <script>
-        (function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const joinCode = urlParams.get('join');
-            if (joinCode) {
-                window.addEventListener('DOMContentLoaded', function() {
-                    const pinInput = document.getElementById('live-pin');
-                    if (pinInput) {
-                        pinInput.value = joinCode;
-                        setTimeout(() => {
-                            document.getElementById('live-student-name').focus();
-                        }, 100);
-                    }
-                });
-            }
-        })();
-    </script>
 </body>
 </html>
