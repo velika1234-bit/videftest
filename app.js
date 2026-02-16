@@ -42,7 +42,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
-
+console.log("app.js стартира");
 // ==========================================
 // ГЛОБАЛНО СЪСТОЯНИЕ
 // ==========================================
