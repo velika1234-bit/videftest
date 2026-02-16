@@ -80,7 +80,6 @@ const safeSetHTML = (id, html) => {
 onAuthStateChanged(auth, async (u) => {
     const incomingUid = u?.uid || null;
     
-    // Актуализиране на UI за текущия потребител (за дебъгване)
     const userEmailDisplay = document.getElementById('user-email-display');
     if (userEmailDisplay) {
         userEmailDisplay.innerText = u ? (u.email || "Анонимен") : "";
@@ -89,11 +88,9 @@ onAuthStateChanged(auth, async (u) => {
     if (lastAuthUid !== incomingUid) {
         myQuizzes = [];
         soloResults = [];
-        // Ако потребителят се е сменил, преначертаваме веднага, за да изчистим старото инфо
         if (document.getElementById('my-quizzes-list')) renderMyQuizzes();
         if (document.getElementById('solo-results-body')) renderSoloResults();
 
-        // --- ПОКАЗВАНЕ НА АДМИН БУТОН (само за администратор) ---
         const ADMIN_UID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
         const adminBtn = document.getElementById('admin-panel-btn');
         if (adminBtn) {
@@ -545,30 +542,21 @@ window.openLiveHost = async () => {
     window.switchScreen('live-host');
     document.getElementById('host-pin').innerText = sessionID;
 
-    // --- QR CODE GENERATION & INJECTION (MODIFIED) ---
-    // 1. Generate URLs
+    // --- QR CODE GENERATION & INJECTION ---
     const joinUrl = `${window.location.origin}${window.location.pathname}?pin=${sessionID}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(joinUrl)}`;
     
-    // 2. Inject QR under results table (ranking)
     const resultsBody = document.getElementById('host-results-body');
     if (resultsBody) {
-        // Find the table that contains the tbody
         const table = resultsBody.closest('table');
         if (table) {
             let qrContainer = document.getElementById('host-qr-container');
-            // If container doesn't exist, create it
             if (!qrContainer) {
                 qrContainer = document.createElement('div');
                 qrContainer.id = 'host-qr-container';
-                // Styles: centered, margin top, nice background
                 qrContainer.className = 'mt-6 flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-slate-100 animate-pop';
-                
-                // Insert after the table
-                // table.parentNode is likely the responsive wrapper div or the card div
                 table.parentNode.insertBefore(qrContainer, table.nextSibling);
             }
-            // Set content
             qrContainer.innerHTML = `
                 <div class="text-[10px] uppercase font-black text-slate-400 mb-2 tracking-widest">Бърз вход с QR</div>
                 <img src="${qrUrl}" class="w-32 h-32 rounded-xl border-4 border-indigo-50" alt="QR Join Code">
@@ -636,8 +624,8 @@ window.initHostPlayer = () => {
     document.getElementById('host-video-container').innerHTML = '<div id="host-video"></div>';
     hostPlayer = new YT.Player('host-video', {
         videoId: currentQuiz.v,
-        width: '100%',  // <--- ADDED to fill panel
-        height: '100%', // <--- ADDED to fill panel
+        width: '100%',
+        height: '100%',
         playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1 },
         events: {
             'onReady': (event) => event.target.playVideo(),
@@ -1119,7 +1107,396 @@ window.exportPDF = async () => {
 };
 
 // --- STUDENT CLIENT LOGIC ---
-// ... (останалият код за live client остава същият)
+window.joinLiveSession = async () => {
+    const pin = document.getElementById('live-pin').value.trim();
+    studentNameValue = document.getElementById('live-student-name').value.trim();
+    if (!pin || !studentNameValue) return window.showMessage("Име и ПИН са задължителни!", 'error');
+    try {
+        if (!user) await signInAnonymously(auth);
+        const sessionRef = getSessionRefById(pin);
+        sessionID = pin;
+        sessionDocId = pin;
+        const sessionSnap = await getDoc(sessionRef);
+        if (!sessionSnap.exists()) return window.showMessage("Невалиден ПИН код.", 'error');
+
+        const randomAvatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+        window.switchScreen('live-client');
+
+        liveScore = 0;
+        lastAnsweredIdx = -1;
+        document.getElementById('my-avatar-display').innerText = randomAvatar;
+        window.tempLiveSelection = null;
+
+        const uid = auth.currentUser?.uid || "unknown";
+
+        participantStorageMode = 'legacy';
+        const legacyPartRef = getLegacyParticipantRef(uid);
+        const sessionPartRef = getParticipantRef(pin, uid);
+
+        let pSnap = await getDoc(sessionPartRef);
+        let targetRef = sessionPartRef;
+        let found = false;
+
+        if (pSnap.exists()) {
+            found = true;
+            participantStorageMode = 'session';
+        } else {
+            pSnap = await getDoc(legacyPartRef);
+            if (pSnap.exists() && pSnap.data().sessionId === pin) {
+                found = true;
+                targetRef = legacyPartRef;
+                participantStorageMode = 'legacy';
+            }
+        }
+
+        currentParticipantRef = targetRef;
+
+        if (found) {
+            const d = pSnap.data();
+            liveScore = d.score || 0;
+            studentNameValue = d.name;
+            window.showMessage("Върнахте се в сесията!", "info");
+        } else {
+            const participantPayload = {
+                name: studentNameValue, sessionId: pin, avatar: randomAvatar, score: 0,
+                finished: false, lastAnsweredIdx: -1, answers: {}
+            };
+
+            try {
+                targetRef = sessionPartRef;
+                currentParticipantRef = sessionPartRef;
+                participantStorageMode = 'session';
+                await setDoc(sessionPartRef, participantPayload, { merge: true });
+            } catch (writeErr) {
+                if (writeErr?.code !== 'permission-denied') throw writeErr;
+                targetRef = legacyPartRef;
+                currentParticipantRef = legacyPartRef;
+                participantStorageMode = 'legacy';
+                await setDoc(legacyPartRef, participantPayload, { merge: true });
+            }
+        }
+
+        const unsub = onSnapshot(sessionRef, (snap) => {
+            const d = snap.data(); if (!d) return;
+            if (d.status === 'finished') {
+                document.getElementById('client-question').classList.add('hidden');
+                document.getElementById('client-waiting').classList.add('hidden');
+                document.getElementById('client-finished').classList.remove('hidden');
+                const maxPoints = d.totalPoints || '?';
+                document.getElementById('final-score-display').innerText = `${liveScore} / ${maxPoints}`;
+            } else if (d.status === 'active' && d.activeQ !== -1) {
+                if (liveActiveQIdx !== d.activeQ) {
+                    liveActiveQIdx = d.activeQ;
+                    window.currentLiveQ = d.qData;
+                    window.currentLiveQStartedAtMs = (typeof d.qStartedAt?.toMillis === 'function')
+                        ? d.qStartedAt.toMillis()
+                        : (d.qStartedAt?.seconds ? d.qStartedAt.seconds * 1000 : Date.now());
+                    document.getElementById('client-question').classList.remove('hidden');
+                    document.getElementById('client-waiting').classList.add('hidden');
+                    document.getElementById('live-q-text-client').innerText = d.qData.text;
+                    window.renderLiveQuestionUI(d.qData);
+                }
+            } else {
+                document.getElementById('client-question').classList.add('hidden');
+                document.getElementById('client-waiting').classList.remove('hidden');
+                document.getElementById('waiting-status-text').innerText = "Изчакай въпрос...";
+            }
+        }, (error) => {
+            if (error.code === 'permission-denied') window.showRulesHelpModal();
+        });
+        unsubscribes.push(unsub);
+    } catch (e) {
+        console.error(e);
+        if (e.code === 'permission-denied') window.showRulesHelpModal();
+        else window.showMessage("Грешка при свързване.", "error");
+    }
+};
+
+window.selectLiveOption = (el, val) => {
+    document.querySelectorAll('.client-opt-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
+        btn.classList.add('bg-slate-50', 'text-slate-800', 'border-slate-100');
+    });
+    el.classList.remove('bg-slate-50', 'text-slate-800', 'border-slate-100');
+    el.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600');
+
+    window.tempLiveSelection = val;
+
+    const stickyContainer = document.getElementById('sticky-btn-container');
+    stickyContainer.classList.remove('hidden');
+};
+
+window.submitLiveSingleConfirm = () => {
+    if (window.tempLiveSelection === null) return;
+    const isCorrect = window.tempLiveSelection === window.currentLiveQ.correct;
+    window.submitLiveFinal(isCorrect);
+};
+
+window.selectLiveMultiple = () => {
+    const checked = Array.from(document.querySelectorAll('input[name="c-multiple"]:checked'));
+    const stickyContainer = document.getElementById('sticky-btn-container');
+    if (checked.length > 0) {
+        stickyContainer.classList.remove('hidden');
+    } else {
+        stickyContainer.classList.add('hidden');
+    }
+};
+
+window.submitLiveMultipleConfirm = () => {
+    const checked = Array.from(document.querySelectorAll('input[name="c-multiple"]:checked')).map(el => parseInt(el.value));
+    const isCorrect = JSON.stringify(checked.sort()) === JSON.stringify(window.currentLiveQ.correct.sort());
+    window.submitLiveFinal(isCorrect);
+};
+
+window.submitLiveOpenConfirm = () => {
+    const ans = document.getElementById('c-open-answer')?.value.trim().toLowerCase();
+    const isCorrect = ans === window.currentLiveQ.correct;
+    window.submitLiveFinal(isCorrect);
+};
+
+window.submitLiveNumericConfirm = () => {
+    const slider = document.getElementById('c-numeric-slider');
+    if (!slider) return;
+    const answer = parseFloat(slider.value);
+    const q = window.currentLiveQ;
+    const correct = q.correct;
+    const tolerance = q.tolerance || 0;
+    const isCorrect = Math.abs(answer - correct) <= tolerance;
+    window.submitLiveFinal(isCorrect);
+};
+
+window.pickLiveOrder = (el, originalIdx) => {
+    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
+    if (window.userOrderSequence.includes(originalIdx)) return;
+    window.userOrderSequence.push(originalIdx);
+    el.classList.add('opacity-40', 'pointer-events-none');
+    const result = document.getElementById('client-ordering-result');
+    if (result) {
+        const chip = document.createElement('div');
+        chip.className = 'bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-black text-[10px]';
+        chip.innerText = `${window.userOrderSequence.length}. ${el.innerText}`;
+        result.appendChild(chip);
+    }
+    if (window.userOrderSequence.length === window.currentLiveQ.options.length) {
+        document.getElementById('sticky-btn-container')?.classList.remove('hidden');
+    }
+};
+
+window.pickLiveTimeline = (el, originalIdx) => {
+    if (!Array.isArray(window.userOrderSequence)) window.userOrderSequence = [];
+    if (window.userOrderSequence.includes(originalIdx)) return;
+    window.userOrderSequence.push(originalIdx);
+    el.classList.add('opacity-40', 'pointer-events-none');
+    const result = document.getElementById('client-timeline-result');
+    if (result) {
+        const chip = document.createElement('div');
+        chip.className = 'bg-amber-600 text-white px-3 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1';
+        chip.innerHTML = `<i data-lucide="clock" class="w-3 h-3"></i> ${window.userOrderSequence.length}. ${el.innerText}`;
+        result.appendChild(chip);
+        if (window.lucide) lucide.createIcons();
+    }
+    if (window.userOrderSequence.length === window.currentLiveQ.options.length) {
+        document.getElementById('sticky-btn-container')?.classList.remove('hidden');
+    }
+};
+
+window.clearLiveTimeline = () => {
+    window.userOrderSequence = [];
+    const result = document.getElementById('client-timeline-result');
+    if (result) result.innerHTML = '';
+    document.querySelectorAll('.client-timeline-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
+    document.getElementById('sticky-btn-container')?.classList.add('hidden');
+};
+
+window.submitLiveTimelineConfirm = () => {
+    const q = window.currentLiveQ;
+    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) {
+        return window.showMessage('Подредете всички събития!', 'error');
+    }
+    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
+    window.submitLiveFinal(isCorrect);
+};
+
+window.clearLiveOrdering = () => {
+    window.userOrderSequence = [];
+    const result = document.getElementById('client-ordering-result');
+    if (result) result.innerHTML = '';
+    document.querySelectorAll('.client-order-item').forEach((btn) => btn.classList.remove('opacity-40', 'pointer-events-none'));
+    document.getElementById('sticky-btn-container')?.classList.add('hidden');
+};
+
+window.submitLiveOrderingConfirm = () => {
+    const q = window.currentLiveQ;
+    if (!Array.isArray(window.userOrderSequence) || window.userOrderSequence.length !== q.options.length) {
+        return window.showMessage('Подредете всички елементи!', 'error');
+    }
+    const isCorrect = JSON.stringify(window.userOrderSequence) === JSON.stringify(q.correct);
+    window.submitLiveFinal(isCorrect);
+};
+
+window.renderLiveQuestionUI = (q) => {
+    const container = document.getElementById('live-options-client');
+    container.innerHTML = '';
+    window.tempLiveSelection = null;
+    window.userOrderSequence = [];
+
+    let btnHtml = `
+    <div class="h-28"></div>
+    <div id="sticky-btn-container" class="fixed bottom-0 left-0 w-full p-4 bg-white/90 backdrop-blur-md border-t border-indigo-100 z-50 hidden animate-pop pb-6 sm:pb-4">
+        <button id="btn-submit-live-unified" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-lg shadow-xl shadow-indigo-200 transform active:scale-95 transition-all">ИЗПРАТИ</button>
+    </div>`;
+
+    if (q.type === 'single') {
+        container.innerHTML = q.options.map((o, i) => `
+            <button onclick="window.selectLiveOption(this, ${i})" class="client-opt-btn w-full p-4 text-left bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 shadow-sm hover:border-indigo-300 transition-all text-sm mb-2">${o}</button>
+        `).join('') + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveSingleConfirm;
+    } else if (q.type === 'multiple') {
+        container.innerHTML = q.options.map((o, i) => `
+            <label class="flex items-center gap-4 w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 cursor-pointer text-sm mb-2">
+                <input type="checkbox" name="c-multiple" value="${i}" class="w-6 h-6" onchange="window.selectLiveMultiple()"> ${o}
+            </label>
+        `).join('') + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveMultipleConfirm;
+    } else if (q.type === 'boolean') {
+        container.innerHTML = `
+         <div class="grid grid-cols-2 gap-4">
+            <button onclick="window.selectLiveOption(this, true)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-emerald-600 text-xl">ДА</button>
+            <button onclick="window.selectLiveOption(this, false)" class="client-opt-btn p-6 sm:p-8 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-rose-600 text-xl">НЕ</button>
+         </div>` + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveSingleConfirm;
+    } else if (q.type === 'open') {
+        container.innerHTML = `<input type="text" id="c-open-answer" placeholder="Напишете отговор..." class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-base outline-none text-center mb-4">` + btnHtml;
+        document.getElementById('sticky-btn-container').classList.remove('hidden');
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOpenConfirm;
+    } else if (q.type === 'ordering') {
+        const shuffled = q.options.map((o, i) => ({ o, i })).sort(() => Math.random() - 0.5);
+        container.innerHTML = `
+            <div id="client-ordering-pool" class="grid grid-cols-1 gap-2 mb-4">${shuffled.map(item => `<button onclick="window.pickLiveOrder(this, ${item.i})" class="client-order-item w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-slate-800 text-sm">${item.o}</button>`).join('')}</div>
+            <div id="client-ordering-result" class="flex flex-wrap justify-center gap-2 mb-4 min-h-[40px] border-t pt-4"></div>
+            <button type="button" onclick="window.clearLiveOrdering()" class="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] mb-2">Изчисти</button>
+        ` + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveOrderingConfirm;
+    } else if (q.type === 'timeline') {
+        const shuffled = q.options.map((o, i) => ({ o, i })).sort(() => Math.random() - 0.5);
+        container.innerHTML = `
+            <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 font-black text-xs flex items-center gap-2">
+                <i data-lucide="clock" class="w-4 h-4"></i> Подредете събитията в хронологичен ред
+            </div>
+            <div id="client-timeline-pool" class="grid grid-cols-1 gap-2 mb-4">${shuffled.map(item => `<button onclick="window.pickLiveTimeline(this, ${item.i})" class="client-timeline-item w-full p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl font-black text-amber-800 text-sm hover:bg-amber-100 transition-all">${item.o}</button>`).join('')}</div>
+            <div id="client-timeline-result" class="flex flex-wrap justify-center gap-2 mb-4 min-h-[40px] border-t border-amber-200 pt-4"></div>
+            <button type="button" onclick="window.clearLiveTimeline()" class="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] mb-2">Изчисти хронологията</button>
+        ` + btnHtml;
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveTimelineConfirm;
+        if (window.lucide) lucide.createIcons();
+    } else if (q.type === 'numeric' || q.type === 'timeline-slider') {
+        const defaultValue = (q.min + q.max) / 2;
+        const isTimeline = (q.type === 'timeline-slider');
+
+        let sliderHtml = '';
+        if (isTimeline) {
+            const years = [];
+            const step = Math.max(1, Math.ceil((q.max - q.min) / 5));
+            for (let y = q.min; y <= q.max; y += step) {
+                years.push(Math.round(y));
+            }
+            if (years[years.length - 1] < q.max) years.push(Math.round(q.max));
+
+            sliderHtml = `
+                <div class="relative pt-6 pb-2">
+                    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-300 via-amber-500 to-amber-700 rounded-full"></div>
+                    <div class="flex justify-between text-[10px] font-bold text-amber-700 px-1">
+                        ${years.map(y => `<span>${y}</span>`).join('')}
+                    </div>
+                    <input type="range" id="c-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" 
+                        class="w-full h-2 bg-transparent accent-amber-500 appearance-none cursor-pointer mt-2">
+                    <div class="flex justify-between text-slate-800 text-sm font-bold mt-2">
+                        <span>${q.min}</span>
+                        <span id="c-numeric-value" class="bg-amber-600 text-white px-6 py-2 rounded-full font-black shadow-lg">${defaultValue}</span>
+                        <span>${q.max}</span>
+                    </div>
+                </div>
+            `;
+        } else {
+            sliderHtml = `
+                <div class="space-y-6">
+                    <input type="range" id="c-numeric-slider" min="${q.min}" max="${q.max}" step="${q.step || 1}" value="${defaultValue}" class="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                    <div class="flex justify-between text-slate-800 text-sm font-bold">
+                        <span>${q.min}</span>
+                        <span id="c-numeric-value" class="bg-indigo-100 px-4 py-2 rounded-full font-black">${defaultValue}</span>
+                        <span>${q.max}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = sliderHtml + btnHtml;
+
+        const slider = document.getElementById('c-numeric-slider');
+        const display = document.getElementById('c-numeric-value');
+        slider.addEventListener('input', () => {
+            display.innerText = slider.value;
+        });
+
+        document.getElementById('sticky-btn-container').classList.remove('hidden');
+        document.getElementById('btn-submit-live-unified').onclick = window.submitLiveNumericConfirm;
+    }
+};
+
+window.submitLiveFinal = async (isCorrect) => {
+    if (!user || lastAnsweredIdx === liveActiveQIdx) return;
+    lastAnsweredIdx = liveActiveQIdx;
+    liveScore += isCorrect ? (window.currentLiveQ.points || 1) : 0;
+
+    document.getElementById('client-question').classList.add('hidden');
+    document.getElementById('client-waiting').classList.remove('hidden');
+    document.getElementById('waiting-status-text').innerHTML = `
+        <div class="flex flex-col items-center gap-4">
+            <div class="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <span>Изпращане на отговор...</span>
+        </div>
+    `;
+
+    const updatePayload = {
+        score: liveScore,
+        lastAnsweredIdx: liveActiveQIdx,
+        lastResult: isCorrect
+    };
+    const reactionMs = window.currentLiveQStartedAtMs ? Math.max(0, Date.now() - window.currentLiveQStartedAtMs) : null;
+    updatePayload[`answers.${liveActiveQIdx}`] = isCorrect;
+    if (reactionMs !== null) updatePayload[`reactionMs.${liveActiveQIdx}`] = reactionMs;
+
+    try {
+        if (currentParticipantRef) {
+            await updateDoc(currentParticipantRef, updatePayload);
+            document.getElementById('waiting-status-text').innerText = isCorrect ? "ВЕРЕН ОТГОВОР! ✨" : "ГРЕШЕН ОТГОВОР... ❌";
+        }
+    } catch (e) {
+        console.error(e);
+        document.getElementById('waiting-status-text').innerText = "Грешка при изпращане!";
+        setTimeout(() => window.submitLiveFinal(isCorrect), 2000);
+    }
+};
+
+const stopSpeechReader = () => {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+};
+
+const readQuestionWithSpeech = (text) => {
+    if (!sopModeEnabled || !('speechSynthesis' in window)) return;
+    try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'bg-BG';
+        u.rate = 0.9;
+        u.pitch = 1;
+        window.speechSynthesis.speak(u);
+    } catch (e) {
+        console.error('Speech reader failed:', e);
+    }
+};
 
 // --- SOLO LOGIC (ПОПРАВЕНА ЗА ДЪЛГИ КОДОВЕ) ---
 window.startIndividual = async () => {
@@ -1541,4 +1918,291 @@ window.updateModalFields = () => {
             <div class="space-y-4">
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-[10px] font-bold text-slate-400 uppercase">М
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Мин. стойност</label>
+                        <input type="number" id="m-numeric-min" value="0" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Макс. стойност</label>
+                        <input type="number" id="m-numeric-max" value="100" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Стъпка</label>
+                        <input type="number" id="m-numeric-step" value="1" min="0.1" step="any" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Точен отговор</label>
+                        <input type="number" id="m-numeric-correct" value="50" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase">Толеранс (±)</label>
+                    <input type="number" id="m-numeric-tolerance" value="0" min="0" step="any" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
+                    <p class="text-[9px] text-slate-400 mt-1">Ако толерансът е 2, то отговор 48-52 е верен.</p>
+                </div>
+            </div>
+        `;
+    }
+};
+
+window.saveQuestion = () => {
+    const text = document.getElementById('m-text').value.trim();
+    const type = document.getElementById('m-type').value;
+    if (!text) return window.showMessage("Въведете текст!", "error");
+    let timeVal = editingQuestionIndex !== null ? questions[editingQuestionIndex].time : Math.floor(player.getCurrentTime());
+    let qData = { time: timeVal, text, type, points: parseInt(document.getElementById('m-points').value) || 1 };
+
+    if (type === 'single' || type === 'multiple' || type === 'ordering' || type === 'timeline') {
+        const rows = Array.from(document.querySelectorAll('#m-opts-list .option-row'));
+        const entries = rows.map((row) => ({
+            text: row.querySelector('.option-input')?.value.trim() || '',
+            checked: !!row.querySelector('input[name="m-correct"]')?.checked
+        })).filter((e) => e.text);
+        if (entries.length < 2) return window.showMessage("Добавете поне 2 отговора!", "error");
+        qData.options = entries.map((e) => e.text);
+
+        if (type === 'single' || type === 'multiple') {
+            const correct = [];
+            entries.forEach((entry, idx) => {
+                if (entry.checked) correct.push(idx);
+            });
+            if (correct.length === 0) return window.showMessage("Маркирайте верен отговор!", "error");
+            if (type === 'single') qData.correct = correct[0];
+            else qData.correct = correct;
+        } else {
+            qData.correct = qData.options.map((_, i) => i);
+        }
+    } else if (type === 'boolean') {
+        qData.correct = document.querySelector('input[name="m-correct"]:checked').value === 'true';
+    } else if (type === 'open') {
+        qData.correct = document.getElementById('m-open-correct')?.value.trim().toLowerCase();
+    } else if (type === 'numeric' || type === 'timeline-slider') {
+        const min = parseFloat(document.getElementById('m-numeric-min').value);
+        const max = parseFloat(document.getElementById('m-numeric-max').value);
+        const step = parseFloat(document.getElementById('m-numeric-step').value);
+        const correct = parseFloat(document.getElementById('m-numeric-correct').value);
+        const tolerance = parseFloat(document.getElementById('m-numeric-tolerance').value) || 0;
+
+        qData.min = min;
+        qData.max = max;
+        qData.step = step;
+        qData.correct = correct;
+        qData.tolerance = tolerance;
+    }
+
+    if (editingQuestionIndex !== null) {
+        questions[editingQuestionIndex] = qData;
+    } else {
+        questions.push(qData);
+    }
+    questions.sort((a, b) => a.time - b.time);
+    renderEditorList();
+    document.getElementById('modal-q').classList.add('hidden');
+    editingQuestionIndex = null;
+};
+
+window.editQuestionContent = (index) => {
+    const q = questions[index];
+    editingQuestionIndex = index;
+    document.getElementById('m-title-text').innerText = "Редактиране";
+    document.getElementById('m-text').value = q.text;
+    document.getElementById('m-type').value = q.type;
+    document.getElementById('m-points').value = q.points || 1;
+    document.getElementById('m-time').innerText = window.formatTime(q.time);
+    document.getElementById('modal-q').classList.remove('hidden');
+    document.getElementById('modal-q').classList.add('flex');
+    window.updateModalFields();
+
+    if (q.type === 'single' || q.type === 'multiple' || q.type === 'ordering' || q.type === 'timeline') {
+        const list = document.getElementById('m-opts-list');
+        if (list) list.innerHTML = '';
+        (q.options || []).forEach((opt, i) => {
+            const corrects = Array.isArray(q.correct) ? q.correct : [q.correct];
+            const checked = (q.type === 'single' || q.type === 'multiple') && corrects.includes(i);
+            window.addQuestionOptionRow(opt, checked);
+        });
+    } else if (q.type === 'boolean') {
+        const boolInput = document.querySelector(`input[name="m-correct"][value="${q.correct}"]`);
+        if (boolInput) boolInput.checked = true;
+    } else if (q.type === 'open') {
+        const openCorrect = document.getElementById('m-open-correct');
+        if (openCorrect) openCorrect.value = q.correct || '';
+    } else if (q.type === 'numeric' || type === 'timeline-slider') {
+        const minInput = document.getElementById('m-numeric-min');
+        const maxInput = document.getElementById('m-numeric-max');
+        const stepInput = document.getElementById('m-numeric-step');
+        const correctInput = document.getElementById('m-numeric-correct');
+        const toleranceInput = document.getElementById('m-numeric-tolerance');
+
+        if (minInput) minInput.value = q.min ?? 0;
+        if (maxInput) maxInput.value = q.max ?? 100;
+        if (stepInput) stepInput.value = q.step ?? 1;
+        if (correctInput) correctInput.value = q.correct ?? 50;
+        if (toleranceInput) toleranceInput.value = q.tolerance ?? 0;
+    }
+};
+
+function renderEditorList() {
+    const list = document.getElementById('q-list'); if (!list) return;
+    list.innerHTML = questions.map((q, i) => `
+        <div class="p-3 bg-white rounded-xl mb-2 flex flex-col gap-2 border shadow-sm">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-1">
+                    <button onclick="window.adjustTime(${i}, -1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">-</button>
+                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${window.formatTime(q.time)}</span>
+                    <button onclick="window.adjustTime(${i}, 1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">+</button>
+                </div>
+                <div class="flex gap-1">
+                    <button onclick="window.editQuestionContent(${i})" title="Текст" class="text-indigo-400 p-1 hover:text-indigo-600"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                    <button onclick="window.deleteEditorQuestion(${i})" title="Изтрий" class="text-rose-400 p-1 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            </div>
+            <div class="text-slate-700 font-black text-xs truncate border-t pt-2 mt-1 opacity-80">${q.text}</div>
+            <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                ${q.type === 'numeric' ? '🔢 Числов отговор' : ''}
+                ${q.type === 'timeline-slider' ? '📅 Хронологичен плъзгач' : ''}
+                ${q.type === 'timeline' ? '📅 Хронология (подреждане)' : ''}
+                ${q.type === 'single' ? '✅ Един верен' : ''}
+                ${q.type === 'multiple' ? '🔀 Множество верни' : ''}
+                ${q.type === 'boolean' ? '✓✓ Вярно/Невярно' : ''}
+                ${q.type === 'open' ? '✏️ Отворен отговор' : ''}
+                ${q.type === 'ordering' ? '↕️ Подреждане' : ''}
+            </div>
+        </div>
+    `).join('') || '<p class="text-center text-slate-300 italic py-6 text-xs">Добавете въпроси.</p>';
+    if (window.lucide) lucide.createIcons();
+}
+
+window.adjustTime = (index, delta) => {
+    questions[index].time = Math.max(0, questions[index].time + delta);
+    questions.sort((a, b) => a.time - b.time);
+    renderEditorList();
+    if (player && typeof player.seekTo === 'function') player.seekTo(questions[index].time, true);
+};
+
+window.deleteEditorQuestion = (i) => { if (confirm("Изтриване на въпроса?")) { questions.splice(i, 1); renderEditorList(); } };
+
+window.saveQuizToLibrary = async () => {
+    if (!user) return;
+    let title = "";
+    const existing = editingQuizId ? myQuizzes.find(x => x.id === editingQuizId) : null;
+    title = prompt("Име на урока:", existing?.title || "");
+    if (title === null) return;
+    if (!title) title = existing?.title || "Без име";
+    window.showMessage("Записване...");
+    try {
+        const data = { title, v: currentVideoId, questions, updatedAt: serverTimestamp() };
+        if (!editingQuizId) data.createdAt = serverTimestamp();
+        if (editingQuizId) await updateDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', editingQuizId), data);
+        else await addDoc(collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes'), data);
+        window.showMessage("Урокът е запазен!", "info");
+        editingQuizId = null;
+        window.switchScreen('teacher-dashboard');
+    } catch (e) {
+        if (e.code === 'permission-denied') window.showRulesHelpModal();
+        else window.showMessage("Грешка при запис!", "error");
+    }
+};
+
+window.showShareCode = (id) => {
+    const q = myQuizzes.find(x => x.id === id);
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify({
+        v: q.v,
+        q: q.questions,
+        title: q.title,
+        ownerId: user?.uid || null,
+        teacherId: user?.uid || null,
+        ownerEmail: user?.email || null,
+        ownerEmailNormalized: user?.email?.toLowerCase?.() || null
+    }))));
+    document.getElementById('share-code-display').value = code;
+    document.getElementById('modal-share').classList.remove('hidden'); document.getElementById('modal-share').classList.add('flex');
+};
+
+window.copyShareCode = () => {
+    const input = document.getElementById('share-code-display');
+    input.select(); document.execCommand('copy');
+    window.showMessage("Копирано!");
+};
+
+window.editQuiz = (id) => {
+    const qData = myQuizzes.find(x => x.id === id);
+    if (!qData) return;
+    editingQuizId = id;
+    questions = JSON.parse(JSON.stringify(qData.questions || []));
+    currentVideoId = qData.v;
+    window.switchScreen('create');
+    document.getElementById('yt-url').value = `https://www.youtube.com/watch?v=${qData.v}`;
+    window.loadEditorVideo(true);
+};
+
+window.deleteQuiz = async (id) => {
+    if (!user) return;
+    if (confirm("Изтриване на урока?")) {
+        await deleteDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', id));
+        window.showMessage("Урокът е изтрит.", "info");
+    }
+};
+// --- Разрешаване на достъп до хранилище (за блокирани ученици) ---
+window.requestStorageAccess = async function () {
+    try {
+        if (document.requestStorageAccess) {
+            await document.requestStorageAccess();
+            window.showMessage("✅ Достъпът е разрешен! Моля, презаредете страницата.", "success");
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            window.showMessage("ℹ️ Вашият браузър не поддържа тази функция. Моля, разрешете 'Достъп до хранилище' от адресната лента.", "info");
+        }
+    } catch (e) {
+        console.error(e);
+        window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
+    }
+};
+
+// --- АДМИНИСТРАТОРСКИ ПАНЕЛ (само за admin) ---
+window.openAdminPanel = async function () {
+    try {
+        window.showMessage("📊 Зареждам статистики...", "info");
+        // Тук се използва httpsCallable, който вече е правилно импортиран
+        const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
+        const result = await getAdminStatsFunc();
+        const stats = result.data;
+
+        const message = `📊 АДМИН СТАТИСТИКИ:
+━━━━━━━━━━━━━━━━━━━━━
+👥 Учители: ${stats.totalTeachers}
+📚 Уроци: ${stats.totalQuizzes}
+📝 Соло резултати: ${stats.totalSoloResults}
+🎬 Сесии на живо: ${stats.totalSessions}
+👩‍🎓 Участници (общо): ${stats.totalParticipants}
+━━━━━━━━━━━━━━━━━━━━━`;
+
+        window.showMessage(message, "info", 15000); // показва се 15 секунди
+    } catch (error) {
+        console.error("Admin panel error:", error);
+        window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
+    }
+};
+
+// --- YT API ---
+window.onYouTubeIframeAPIReady = function () {
+    isYTReady = true;
+    console.log("YouTube API Ready");
+};
+
+// --- AUTO-FILL PIN FROM URL (За ученици) ---
+window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pinParam = urlParams.get('pin');
+    if (pinParam) {
+        // Изчакваме малко, за да сме сигурни, че DOM е зареден и евентуално аутентикацията е минала
+        setTimeout(() => {
+            const pinInput = document.getElementById('live-pin');
+            if (pinInput) {
+                pinInput.value = pinParam;
+                window.showMessage("ПИН кодът е попълнен автоматично! Въведете име.", "success");
+            }
+        }, 1000);
+    }
+});
