@@ -14,20 +14,20 @@ import {
     shuffleArray
 } from './js/utils.js';
 
-import {
+iimport {
     db,
     auth,
     functions,
     finalAppId,
-    legacyAppId,
+    legacyAppId,             // това вече ще съществува
     getTeacherSoloResultsCollection,
     getTeacherQuizzesCollection,
     getSessionRefById,
     getParticipantsCollection,
     getParticipantRef,
     getLegacyParticipantsCollection,
-    getLegacyParticipantRef,
-    getActiveParticipantRef
+    getLegacyParticipantRef
+ 
 } from './js/firebase.js';
 
 // --- Останали Firebase импорти (от CDN) ---
