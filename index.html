@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VideoQuiz Ultimate</title>
-    <!-- Favicon fix -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -34,7 +33,7 @@
         <!-- NOTIFICATIONS -->
         <div id="msg-container" class="fixed top-6 right-6 z-[10000] flex flex-col items-end pointer-events-none"></div>
 
-        <!-- 1. WELCOME SCREEN (Login / Join) -->
+        <!-- 1. WELCOME SCREEN -->
         <div id="screen-welcome" class="hidden h-full flex flex-col md:flex-row overflow-y-auto">
             <!-- Left: Students -->
             <div class="flex-1 bg-white p-6 md:p-12 flex flex-col justify-center items-center relative overflow-hidden">
@@ -46,8 +45,11 @@
                     <!-- Card 1: Individual Mode -->
                     <div class="bg-slate-50 p-6 rounded-3xl border border-slate-200 hover:border-indigo-300 transition-all group">
                         <h3 class="text-indigo-600 font-black text-xl mb-4 flex items-center gap-2"><i data-lucide="user" class="w-5 h-5"></i> Индивидуално</h3>
-                        <form onsubmit="event.preventDefault(); window.startIndividual();" class="space-y-3">
-                             <input type="text" id="ind-quiz-code" placeholder="Постави код на урока тук..." class="w-full p-4 bg-white rounded-2xl border-2 border-slate-200 font-mono text-xs focus:border-indigo-500 outline-none transition-all">
+                        <form onsubmit="event.preventDefault(); window.startIndividual();" class="space-y-4">
+                             <div>
+                                <label class="text-[10px] uppercase font-bold text-slate-400 pl-2">Код на урок</label>
+                                <input type="text" id="ind-quiz-code" placeholder="Постави кода тук..." class="w-full p-4 bg-white rounded-2xl border-2 border-slate-200 font-mono text-xs focus:border-indigo-500 outline-none transition-all">
+                             </div>
                              
                              <div class="flex flex-col gap-2 pl-2">
                                 <label class="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-colors">
@@ -68,11 +70,17 @@
                     <div class="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 hover:border-emerald-300 transition-all relative overflow-hidden">
                         <div class="absolute top-0 right-0 p-4 opacity-10 text-emerald-900"><i data-lucide="users" class="w-24 h-24"></i></div>
                         <h3 class="text-emerald-700 font-black text-xl mb-4 relative z-10 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5"></i> В Клас</h3>
-                        <!-- Wrapped in form for Enter key support and to fix DOM warning -->
-                        <form onsubmit="event.preventDefault(); window.joinLiveSession();" class="space-y-3 relative z-10">
-                            <!-- Correct IDs for app.js -->
-                            <input type="text" id="live-student-name" placeholder="Твоето име" class="w-full p-4 bg-white rounded-2xl border-2 border-emerald-200 font-bold text-slate-700 outline-none focus:border-emerald-500 transition-all text-center">
-                            <input type="number" id="live-pin" placeholder="ПИН Код" class="w-full p-4 bg-white rounded-2xl border-2 border-emerald-200 font-black text-slate-700 outline-none focus:border-emerald-500 transition-all text-center text-xl tracking-widest">
+                        
+                        <form onsubmit="event.preventDefault(); window.joinLiveSession();" class="space-y-4 relative z-10">
+                            <div>
+                                <label class="text-[10px] uppercase font-bold text-emerald-600 pl-2">Твоето Име</label>
+                                <input type="text" id="live-student-name" placeholder="Иван / Мария..." class="w-full p-4 bg-white rounded-2xl border-2 border-emerald-200 font-bold text-slate-700 outline-none focus:border-emerald-500 transition-all text-center">
+                            </div>
+                            
+                            <div>
+                                <label class="text-[10px] uppercase font-bold text-emerald-600 pl-2">ПИН Код (от екрана)</label>
+                                <input type="number" inputmode="numeric" id="live-pin" placeholder="1234" class="w-full p-4 bg-white rounded-2xl border-2 border-emerald-200 font-black text-slate-700 outline-none focus:border-emerald-500 transition-all text-center text-xl tracking-widest">
+                            </div>
                             
                             <button type="submit" class="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-sm hover:bg-emerald-600 transition-all shadow-md shadow-emerald-200">Влез в сесия</button>
                         </form>
@@ -84,14 +92,13 @@
             <div class="bg-slate-900 p-8 flex flex-col justify-center items-center text-white relative w-full md:w-[350px] lg:w-[400px] shrink-0 border-l border-slate-800">
                 <div class="w-full space-y-6 z-10">
                     <h2 id="auth-title" class="text-xl font-black text-center text-indigo-400 uppercase tracking-widest">Учители</h2>
-                    <!-- Wrapped in form -->
                     <form onsubmit="event.preventDefault(); window.handleAuthSubmit();" class="space-y-3">
                         <input type="email" id="auth-email" placeholder="Email" class="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-all text-sm font-bold">
                         <input type="password" id="auth-password" placeholder="Парола" class="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-all text-sm font-bold">
                         <div id="auth-teacher-code-container" class="hidden">
                              <input type="password" id="auth-teacher-code" placeholder="Код за регистрация" class="w-full p-4 bg-amber-900/20 border border-amber-700/50 rounded-2xl text-amber-100 placeholder-amber-700/50 outline-none text-sm font-bold">
                         </div>
-                        <button type="submit" id="auth-submit-btn" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-wider hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/50">Влез в панел</button>
+                        <button type="submit" id="auth-submit-btn" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-wider hover:bg-indigo-50 transition-all shadow-lg shadow-indigo-900/50">Влез в панел</button>
                     </form>
                     <p id="auth-toggle-text" onclick="window.toggleAuthMode()" class="text-center text-[10px] text-slate-400 cursor-pointer hover:text-white transition-colors uppercase font-bold tracking-wider">Регистрация</p>
                 </div>
@@ -120,9 +127,7 @@
                  <!-- My Quizzes Grid -->
                  <section>
                      <h2 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><i data-lucide="book-open" class="w-4 h-4"></i> Вашите уроци</h2>
-                     <div id="my-quizzes-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                         <!-- Items injected here -->
-                     </div>
+                     <div id="my-quizzes-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
                  </section>
 
                  <!-- Solo Results Table -->
@@ -145,9 +150,7 @@
                                      <th class="p-4 text-center">Действие</th>
                                  </tr>
                              </thead>
-                             <tbody id="solo-results-body" class="divide-y divide-slate-50">
-                                 <!-- Rows injected here -->
-                             </tbody>
+                             <tbody id="solo-results-body" class="divide-y divide-slate-50"></tbody>
                          </table>
                      </div>
                  </section>
@@ -165,7 +168,7 @@
             </header>
             
             <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
-                <!-- Video Preview & Controls -->
+                <!-- Video Preview -->
                 <div class="flex-1 bg-black relative flex flex-col justify-center">
                     <div id="editor-player-container" class="aspect-video w-full max-h-full"></div>
                     <div id="editor-view" class="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center p-8 hidden"></div>
@@ -189,7 +192,7 @@
             </div>
         </div>
 
-        <!-- 4. LIVE HOST SCREEN (OPTIMIZED FOR BIG SCREEN) -->
+        <!-- 4. LIVE HOST SCREEN -->
         <div id="screen-live-host" class="hidden h-full flex flex-col bg-slate-100">
             <!-- Compact Header -->
             <div class="bg-indigo-600 text-white px-6 py-2 shadow-md flex justify-between items-center shrink-0 z-20 h-16">
@@ -228,7 +231,7 @@
                     </div>
                 </div>
 
-                <!-- Right: Leaderboard & QR (Fixed Width Sidebar) -->
+                <!-- Right: Leaderboard & QR -->
                 <div class="w-full lg:w-80 flex flex-col shrink-0 gap-3 h-1/3 lg:h-full">
                     <div class="bg-white rounded-2xl shadow-lg border border-slate-100 flex flex-col h-full overflow-hidden">
                         <div class="p-3 border-b bg-slate-50 flex justify-between items-center shrink-0">
@@ -238,9 +241,7 @@
                         
                         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide relative">
                             <table class="w-full text-left border-collapse">
-                                <tbody id="host-results-body">
-                                   <!-- Rows injected by app.js -->
-                                </tbody>
+                                <tbody id="host-results-body"></tbody>
                             </table>
                         </div>
 
@@ -258,7 +259,6 @@
         <div id="screen-live-client" class="hidden h-full flex flex-col bg-slate-50 relative overflow-hidden">
             <div class="absolute top-0 left-0 w-full h-2 bg-indigo-500 z-20"></div>
             
-            <!-- Waiting State -->
             <div id="client-waiting" class="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-6">
                 <div class="text-6xl animate-bounce">👀</div>
                 <div>
@@ -271,7 +271,6 @@
                 </div>
             </div>
 
-            <!-- Question State -->
             <div id="client-question" class="hidden flex-1 flex flex-col p-4 pb-32 overflow-y-auto">
                 <div class="bg-white p-6 rounded-3xl shadow-sm border-b-4 border-slate-100 mb-6">
                     <p id="live-q-text-client" class="text-lg font-black text-slate-800 text-center leading-relaxed">...</p>
@@ -279,7 +278,6 @@
                 <div id="live-options-client" class="space-y-3 max-w-md mx-auto w-full"></div>
             </div>
 
-            <!-- Finished State -->
             <div id="client-finished" class="hidden flex-1 flex flex-col items-center justify-center p-8 bg-indigo-600 text-white text-center">
                 <h1 class="text-4xl font-black mb-2">КРАЙ!</h1>
                 <p class="font-bold opacity-80 mb-8">Твоят резултат:</p>
@@ -301,7 +299,7 @@
             </div>
         </div>
 
-        <!-- 7. FINISH SCREEN (Common) -->
+        <!-- 7. FINISH SCREEN -->
         <div id="screen-finish" class="hidden h-full flex flex-col items-center justify-center bg-slate-50 p-8 text-center">
             <div class="bg-white p-10 rounded-[3rem] shadow-2xl border-b-8 border-indigo-100 max-w-md w-full space-y-6 animate-pop">
                 <div class="w-20 h-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-4xl mb-4">🏆</div>
@@ -311,7 +309,7 @@
             </div>
         </div>
 
-        <!-- MODALS (Editor, Share, Import, Rules) -->
+        <!-- MODALS -->
         <div id="modal-q" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center p-4 backdrop-blur-sm">
             <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-pop">
                 <div class="p-6 border-b bg-slate-50 flex justify-between items-center">
@@ -355,9 +353,7 @@
 
         <div id="modal-share" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center p-4 backdrop-blur-sm">
             <div class="bg-white rounded-3xl p-8 max-w-md w-full text-center space-y-6 animate-pop">
-                <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-2xl mb-2"><i data-lucide="share-2" class="w-8 h-8"></i></div>
                 <h3 class="text-xl font-black text-slate-800">Сподели Урока</h3>
-                <p class="text-sm text-slate-500 font-bold">Копирай този код и го прати на ученик за индивидуална работа.</p>
                 <div class="relative">
                     <input type="text" id="share-code-display" readonly class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-mono text-xs text-slate-600 break-all pr-12">
                     <button onclick="window.copyShareCode()" class="absolute right-2 top-2 p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500"><i data-lucide="copy" class="w-4 h-4"></i></button>
@@ -381,11 +377,10 @@
             <div class="bg-white rounded-3xl p-8 max-w-lg w-full space-y-4 animate-pop shadow-2xl relative">
                 <button onclick="document.getElementById('modal-rules-help').classList.add('hidden')" class="absolute top-4 right-4 text-slate-300 hover:text-slate-500"><i data-lucide="x" class="w-6 h-6"></i></button>
                 <div class="text-center">
-                    <div class="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4"><i data-lucide="shield-alert" class="w-8 h-8"></i></div>
                     <h3 class="text-xl font-black text-slate-800">Проблем с достъпа</h3>
                 </div>
                 <div class="text-sm text-slate-600 space-y-2 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p>Браузърът ви блокира достъпа до базата данни ("бисквитките" на трети страни).</p>
+                    <p>Браузърът ви блокира достъпа до базата данни.</p>
                     <button onclick="window.requestStorageAccess()" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-black uppercase text-xs hover:bg-indigo-700">Опитай автоматично разрешаване</button>
                 </div>
             </div>
@@ -393,7 +388,6 @@
 
     </div>
 
-    <!-- MAIN LOGIC -->
     <script type="module" src="app.js"></script>
 
 </body>
