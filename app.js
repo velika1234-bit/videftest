@@ -13,7 +13,7 @@ import {
     getTimestampMs,
     shuffleArray
 } from './js/utils.js';
-iimport {
+import {
     db,
     auth,
     functions,
