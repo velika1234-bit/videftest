@@ -410,7 +410,6 @@ window.loadMyQuizzes = async () => {
     unsubscribes.push(unsub);
 };
 
-// --- ПОПРАВКА: По-устойчиво зареждане на резултати ---
 window.loadSoloResults = async () => {
     if (!user) return;
     soloResults = [];
@@ -465,7 +464,6 @@ function renderMyQuizzes() {
     if (window.lucide) lucide.createIcons();
 }
 
-// --- ПОПРАВКА: По-устойчиво рендиране на таблицата ---
 function renderSoloResults() {
     const body = document.getElementById('solo-results-body');
     if (!body) return;
@@ -547,6 +545,38 @@ window.openLiveHost = async () => {
     window.switchScreen('live-host');
     document.getElementById('host-pin').innerText = sessionID;
 
+    // --- QR CODE GENERATION & INJECTION (MODIFIED) ---
+    // 1. Generate URLs
+    const joinUrl = `${window.location.origin}${window.location.pathname}?pin=${sessionID}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(joinUrl)}`;
+    
+    // 2. Inject QR under results table (ranking)
+    const resultsBody = document.getElementById('host-results-body');
+    if (resultsBody) {
+        // Find the table that contains the tbody
+        const table = resultsBody.closest('table');
+        if (table) {
+            let qrContainer = document.getElementById('host-qr-container');
+            // If container doesn't exist, create it
+            if (!qrContainer) {
+                qrContainer = document.createElement('div');
+                qrContainer.id = 'host-qr-container';
+                // Styles: centered, margin top, nice background
+                qrContainer.className = 'mt-6 flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-slate-100 animate-pop';
+                
+                // Insert after the table
+                // table.parentNode is likely the responsive wrapper div or the card div
+                table.parentNode.insertBefore(qrContainer, table.nextSibling);
+            }
+            // Set content
+            qrContainer.innerHTML = `
+                <div class="text-[10px] uppercase font-black text-slate-400 mb-2 tracking-widest">Бърз вход с QR</div>
+                <img src="${qrUrl}" class="w-32 h-32 rounded-xl border-4 border-indigo-50" alt="QR Join Code">
+                <div class="text-[9px] text-slate-300 mt-1 font-mono">Сканирайте с телефон</div>
+            `;
+        }
+    }
+
     const totalPoints = currentQuiz.q.reduce((a, q) => a + (q.points || 1), 0);
 
     try {
@@ -606,6 +636,8 @@ window.initHostPlayer = () => {
     document.getElementById('host-video-container').innerHTML = '<div id="host-video"></div>';
     hostPlayer = new YT.Player('host-video', {
         videoId: currentQuiz.v,
+        width: '100%',  // <--- ADDED to fill panel
+        height: '100%', // <--- ADDED to fill panel
         playerVars: { 'autoplay': 1, 'modestbranding': 1, 'rel': 0, 'playsinline': 1 },
         events: {
             'onReady': (event) => event.target.playVideo(),
@@ -1089,16 +1121,33 @@ window.exportPDF = async () => {
 // --- STUDENT CLIENT LOGIC ---
 // ... (останалият код за live client остава същият)
 
-// --- SOLO LOGIC (ПОПРАВЕНА) ---
+// --- SOLO LOGIC (ПОПРАВЕНА ЗА ДЪЛГИ КОДОВЕ) ---
 window.startIndividual = async () => {
-    const pinCode = document.getElementById('ind-quiz-code').value.trim();
+    // 1. Почистване на входа
+    const pinInput = document.getElementById('ind-quiz-code');
+    // Премахване на всякакви интервали и нови редове
+    const pinCode = pinInput ? pinInput.value.trim().replace(/\s/g, '') : '';
+    
     if (!pinCode) return window.showMessage("Моля, въведете код на урока!", 'error');
 
     window.showMessage("Зареждане на теста...", "info");
 
-    const decoded = window.decodeQuizCode(pinCode);
+    // 2. Безопасно декодиране
+    let decoded = null;
+    try {
+        decoded = window.decodeQuizCode(pinCode);
+    } catch (decodeErr) {
+        console.error(decodeErr);
+        return window.showMessage("Невалиден формат на кода (грешка при декодиране).", 'error');
+    }
+
     if (!decoded) return window.showMessage("Невалиден код на урок.", 'error');
     
+    // 3. Проверка за видео ID
+    if (!decoded.v) {
+        return window.showMessage("Кодът е повреден: липсва видео ID.", 'error');
+    }
+
     // Проверка за въпроси
     if (!decoded.q || !Array.isArray(decoded.q) || decoded.q.length === 0) {
         return window.showMessage("Този урок няма въпроси.", 'error');
@@ -1162,7 +1211,14 @@ window.initSolvePlayer = () => {
         try { solvePlayer.destroy(); } catch(e) {}
     }
 
-    document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
+    // Уверяваме се, че контейнерът е чист
+    const container = document.getElementById('solve-player-container');
+    if (container) {
+        container.innerHTML = '<div id="solve-player"></div>';
+    } else {
+        console.error("Missing solve-player-container!");
+        return;
+    }
     
     solvePlayer = new YT.Player('solve-player', {
         videoId: currentQuiz.v, 
@@ -1205,6 +1261,10 @@ window.initSolvePlayer = () => {
                     activeIntervals.forEach(i => clearInterval(i));
                     activeIntervals = [];
                 }
+            },
+            'onError': (e) => {
+                console.error("YouTube Player Error:", e);
+                window.showMessage("Грешка при зареждане на видеото (YouTube Error " + e.data + ")", "error");
             }
         }
     });
@@ -1319,6 +1379,17 @@ window.triggerSoloQuestion = (q) => {
     }
 };
 
+window.submitSoloNumeric = () => {
+    const slider = document.getElementById('s-numeric-slider');
+    if (!slider) return;
+    const answer = parseFloat(slider.value);
+    const q = currentQuiz.q[currentQIndex];
+    const correct = q.correct;
+    const tolerance = q.tolerance || 0;
+    const isCorrect = Math.abs(answer - correct) <= tolerance;
+    window.submitSoloFinal(isCorrect);
+};
+
 window.submitSoloFinal = (isCorrect) => {
     if (isCorrect) scoreCount += (currentQuiz.q[currentQIndex].points || 1);
     stopSpeechReader();
@@ -1378,7 +1449,7 @@ window.finishSoloGame = async () => {
             window.showMessage("Записване на резултат...", "info");
             await setDoc(doc(getTeacherSoloResultsCollection(currentQuizOwnerId), resId), {
                 studentName: studentNameValue,
-                quizTitle: currentQuiz.title || "Индивидуален тест",
+                quizTitle: currentQuiz.title + (sopModeEnabled ? " (СОП)" : "") || "Индивидуален тест",
                 score: scoreText,
                 timestamp: serverTimestamp(),
                 userId: currentUser.uid,
@@ -1470,275 +1541,4 @@ window.updateModalFields = () => {
             <div class="space-y-4">
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-[10px] font-bold text-slate-400 uppercase">Мин. стойност</label>
-                        <input type="number" id="m-numeric-min" value="0" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
-                    </div>
-                    <div>
-                        <label class="text-[10px] font-bold text-slate-400 uppercase">Макс. стойност</label>
-                        <input type="number" id="m-numeric-max" value="100" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-[10px] font-bold text-slate-400 uppercase">Стъпка</label>
-                        <input type="number" id="m-numeric-step" value="1" min="0.1" step="any" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
-                    </div>
-                    <div>
-                        <label class="text-[10px] font-bold text-slate-400 uppercase">Точен отговор</label>
-                        <input type="number" id="m-numeric-correct" value="50" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
-                    </div>
-                </div>
-                <div>
-                    <label class="text-[10px] font-bold text-slate-400 uppercase">Толеранс (±)</label>
-                    <input type="number" id="m-numeric-tolerance" value="0" min="0" step="any" class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-sm focus:border-indigo-600 focus:outline-none">
-                    <p class="text-[9px] text-slate-400 mt-1">Ако толерансът е 2, то отговор 48-52 е верен.</p>
-                </div>
-            </div>
-        `;
-    }
-};
-
-window.saveQuestion = () => {
-    const text = document.getElementById('m-text').value.trim();
-    const type = document.getElementById('m-type').value;
-    if (!text) return window.showMessage("Въведете текст!", "error");
-    let timeVal = editingQuestionIndex !== null ? questions[editingQuestionIndex].time : Math.floor(player.getCurrentTime());
-    let qData = { time: timeVal, text, type, points: parseInt(document.getElementById('m-points').value) || 1 };
-
-    if (type === 'single' || type === 'multiple' || type === 'ordering' || type === 'timeline') {
-        const rows = Array.from(document.querySelectorAll('#m-opts-list .option-row'));
-        const entries = rows.map((row) => ({
-            text: row.querySelector('.option-input')?.value.trim() || '',
-            checked: !!row.querySelector('input[name="m-correct"]')?.checked
-        })).filter((e) => e.text);
-        if (entries.length < 2) return window.showMessage("Добавете поне 2 отговора!", "error");
-        qData.options = entries.map((e) => e.text);
-
-        if (type === 'single' || type === 'multiple') {
-            const correct = [];
-            entries.forEach((entry, idx) => {
-                if (entry.checked) correct.push(idx);
-            });
-            if (correct.length === 0) return window.showMessage("Маркирайте верен отговор!", "error");
-            if (type === 'single') qData.correct = correct[0];
-            else qData.correct = correct;
-        } else {
-            qData.correct = qData.options.map((_, i) => i);
-        }
-    } else if (type === 'boolean') {
-        qData.correct = document.querySelector('input[name="m-correct"]:checked').value === 'true';
-    } else if (type === 'open') {
-        qData.correct = document.getElementById('m-open-correct')?.value.trim().toLowerCase();
-    } else if (type === 'numeric' || type === 'timeline-slider') {
-        const min = parseFloat(document.getElementById('m-numeric-min').value);
-        const max = parseFloat(document.getElementById('m-numeric-max').value);
-        const step = parseFloat(document.getElementById('m-numeric-step').value);
-        const correct = parseFloat(document.getElementById('m-numeric-correct').value);
-        const tolerance = parseFloat(document.getElementById('m-numeric-tolerance').value) || 0;
-
-        qData.min = min;
-        qData.max = max;
-        qData.step = step;
-        qData.correct = correct;
-        qData.tolerance = tolerance;
-    }
-
-    if (editingQuestionIndex !== null) {
-        questions[editingQuestionIndex] = qData;
-    } else {
-        questions.push(qData);
-    }
-    questions.sort((a, b) => a.time - b.time);
-    renderEditorList();
-    document.getElementById('modal-q').classList.add('hidden');
-    editingQuestionIndex = null;
-};
-
-window.editQuestionContent = (index) => {
-    const q = questions[index];
-    editingQuestionIndex = index;
-    document.getElementById('m-title-text').innerText = "Редактиране";
-    document.getElementById('m-text').value = q.text;
-    document.getElementById('m-type').value = q.type;
-    document.getElementById('m-points').value = q.points || 1;
-    document.getElementById('m-time').innerText = window.formatTime(q.time);
-    document.getElementById('modal-q').classList.remove('hidden');
-    document.getElementById('modal-q').classList.add('flex');
-    window.updateModalFields();
-
-    if (q.type === 'single' || q.type === 'multiple' || q.type === 'ordering' || q.type === 'timeline') {
-        const list = document.getElementById('m-opts-list');
-        if (list) list.innerHTML = '';
-        (q.options || []).forEach((opt, i) => {
-            const corrects = Array.isArray(q.correct) ? q.correct : [q.correct];
-            const checked = (q.type === 'single' || q.type === 'multiple') && corrects.includes(i);
-            window.addQuestionOptionRow(opt, checked);
-        });
-    } else if (q.type === 'boolean') {
-        const boolInput = document.querySelector(`input[name="m-correct"][value="${q.correct}"]`);
-        if (boolInput) boolInput.checked = true;
-    } else if (q.type === 'open') {
-        const openCorrect = document.getElementById('m-open-correct');
-        if (openCorrect) openCorrect.value = q.correct || '';
-    } else if (q.type === 'numeric' || type === 'timeline-slider') {
-        const minInput = document.getElementById('m-numeric-min');
-        const maxInput = document.getElementById('m-numeric-max');
-        const stepInput = document.getElementById('m-numeric-step');
-        const correctInput = document.getElementById('m-numeric-correct');
-        const toleranceInput = document.getElementById('m-numeric-tolerance');
-
-        if (minInput) minInput.value = q.min ?? 0;
-        if (maxInput) maxInput.value = q.max ?? 100;
-        if (stepInput) stepInput.value = q.step ?? 1;
-        if (correctInput) correctInput.value = q.correct ?? 50;
-        if (toleranceInput) toleranceInput.value = q.tolerance ?? 0;
-    }
-};
-
-function renderEditorList() {
-    const list = document.getElementById('q-list'); if (!list) return;
-    list.innerHTML = questions.map((q, i) => `
-        <div class="p-3 bg-white rounded-xl mb-2 flex flex-col gap-2 border shadow-sm">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-1">
-                    <button onclick="window.adjustTime(${i}, -1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">-</button>
-                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${window.formatTime(q.time)}</span>
-                    <button onclick="window.adjustTime(${i}, 1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">+</button>
-                </div>
-                <div class="flex gap-1">
-                    <button onclick="window.editQuestionContent(${i})" title="Текст" class="text-indigo-400 p-1 hover:text-indigo-600"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-                    <button onclick="window.deleteEditorQuestion(${i})" title="Изтрий" class="text-rose-400 p-1 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                </div>
-            </div>
-            <div class="text-slate-700 font-black text-xs truncate border-t pt-2 mt-1 opacity-80">${q.text}</div>
-            <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                ${q.type === 'numeric' ? '🔢 Числов отговор' : ''}
-                ${q.type === 'timeline-slider' ? '📅 Хронологичен плъзгач' : ''}
-                ${q.type === 'timeline' ? '📅 Хронология (подреждане)' : ''}
-                ${q.type === 'single' ? '✅ Един верен' : ''}
-                ${q.type === 'multiple' ? '🔀 Множество верни' : ''}
-                ${q.type === 'boolean' ? '✓✓ Вярно/Невярно' : ''}
-                ${q.type === 'open' ? '✏️ Отворен отговор' : ''}
-                ${q.type === 'ordering' ? '↕️ Подреждане' : ''}
-            </div>
-        </div>
-    `).join('') || '<p class="text-center text-slate-300 italic py-6 text-xs">Добавете въпроси.</p>';
-    if (window.lucide) lucide.createIcons();
-}
-
-window.adjustTime = (index, delta) => {
-    questions[index].time = Math.max(0, questions[index].time + delta);
-    questions.sort((a, b) => a.time - b.time);
-    renderEditorList();
-    if (player && typeof player.seekTo === 'function') player.seekTo(questions[index].time, true);
-};
-
-window.deleteEditorQuestion = (i) => { if (confirm("Изтриване на въпроса?")) { questions.splice(i, 1); renderEditorList(); } };
-
-window.saveQuizToLibrary = async () => {
-    if (!user) return;
-    let title = "";
-    const existing = editingQuizId ? myQuizzes.find(x => x.id === editingQuizId) : null;
-    title = prompt("Име на урока:", existing?.title || "");
-    if (title === null) return;
-    if (!title) title = existing?.title || "Без име";
-    window.showMessage("Записване...");
-    try {
-        const data = { title, v: currentVideoId, questions, updatedAt: serverTimestamp() };
-        if (!editingQuizId) data.createdAt = serverTimestamp();
-        if (editingQuizId) await updateDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', editingQuizId), data);
-        else await addDoc(collection(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes'), data);
-        window.showMessage("Урокът е запазен!", "info");
-        editingQuizId = null;
-        window.switchScreen('teacher-dashboard');
-    } catch (e) {
-        if (e.code === 'permission-denied') window.showRulesHelpModal();
-        else window.showMessage("Грешка при запис!", "error");
-    }
-};
-
-window.showShareCode = (id) => {
-    const q = myQuizzes.find(x => x.id === id);
-    const code = btoa(unescape(encodeURIComponent(JSON.stringify({
-        v: q.v,
-        q: q.questions,
-        title: q.title,
-        ownerId: user?.uid || null,
-        teacherId: user?.uid || null,
-        ownerEmail: user?.email || null,
-        ownerEmailNormalized: user?.email?.toLowerCase?.() || null
-    }))));
-    document.getElementById('share-code-display').value = code;
-    document.getElementById('modal-share').classList.remove('hidden'); document.getElementById('modal-share').classList.add('flex');
-};
-
-window.copyShareCode = () => {
-    const input = document.getElementById('share-code-display');
-    input.select(); document.execCommand('copy');
-    window.showMessage("Копирано!");
-};
-
-window.editQuiz = (id) => {
-    const qData = myQuizzes.find(x => x.id === id);
-    if (!qData) return;
-    editingQuizId = id;
-    questions = JSON.parse(JSON.stringify(qData.questions || []));
-    currentVideoId = qData.v;
-    window.switchScreen('create');
-    document.getElementById('yt-url').value = `https://www.youtube.com/watch?v=${qData.v}`;
-    window.loadEditorVideo(true);
-};
-
-window.deleteQuiz = async (id) => {
-    if (!user) return;
-    if (confirm("Изтриване на урока?")) {
-        await deleteDoc(doc(db, 'artifacts', finalAppId, 'users', user.uid, 'my_quizzes', id));
-        window.showMessage("Урокът е изтрит.", "info");
-    }
-};
-// --- Разрешаване на достъп до хранилище (за блокирани ученици) ---
-window.requestStorageAccess = async function () {
-    try {
-        if (document.requestStorageAccess) {
-            await document.requestStorageAccess();
-            window.showMessage("✅ Достъпът е разрешен! Моля, презаредете страницата.", "success");
-            setTimeout(() => location.reload(), 2000);
-        } else {
-            window.showMessage("ℹ️ Вашият браузър не поддържа тази функция. Моля, разрешете 'Достъп до хранилище' от адресната лента.", "info");
-        }
-    } catch (e) {
-        console.error(e);
-        window.showMessage("❌ Неуспешен достъп. Моля, проверете настройките на браузъра си.", "error");
-    }
-};
-
-// --- АДМИНИСТРАТОРСКИ ПАНЕЛ (само за admin) ---
-window.openAdminPanel = async function () {
-    try {
-        window.showMessage("📊 Зареждам статистики...", "info");
-        // Тук се използва httpsCallable, който вече е правилно импортиран
-        const getAdminStatsFunc = httpsCallable(functions, 'getAdminStats');
-        const result = await getAdminStatsFunc();
-        const stats = result.data;
-
-        const message = `📊 АДМИН СТАТИСТИКИ:
-━━━━━━━━━━━━━━━━━━━━━
-👥 Учители: ${stats.totalTeachers}
-📚 Уроци: ${stats.totalQuizzes}
-📝 Соло резултати: ${stats.totalSoloResults}
-🎬 Сесии на живо: ${stats.totalSessions}
-👩‍🎓 Участници (общо): ${stats.totalParticipants}
-━━━━━━━━━━━━━━━━━━━━━`;
-
-        window.showMessage(message, "info", 15000); // показва се 15 секунди
-    } catch (error) {
-        console.error("Admin panel error:", error);
-        window.showMessage("❌ Грешка: " + (error.message || "Нямате права"), "error");
-    }
-};
-
-// --- YT API ---
-window.onYouTubeIframeAPIReady = function () {
-    isYTReady = true;
-    console.log("YouTube API Ready");
-};
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">М
