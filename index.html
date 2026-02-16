@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VideoQuiz Ultimate</title>
+    <!-- Favicon fix -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://www.youtube.com/iframe_api"></script>
@@ -43,7 +46,7 @@
                     <!-- Card 1: Individual Mode -->
                     <div class="bg-slate-50 p-6 rounded-3xl border border-slate-200 hover:border-indigo-300 transition-all group">
                         <h3 class="text-indigo-600 font-black text-xl mb-4 flex items-center gap-2"><i data-lucide="user" class="w-5 h-5"></i> Индивидуално</h3>
-                        <div class="space-y-3">
+                        <form onsubmit="event.preventDefault(); window.startIndividual();" class="space-y-3">
                              <input type="text" id="ind-quiz-code" placeholder="Постави код на урока тук..." class="w-full p-4 bg-white rounded-2xl border-2 border-slate-200 font-mono text-xs focus:border-indigo-500 outline-none transition-all">
                              
                              <div class="flex flex-col gap-2 pl-2">
@@ -57,21 +60,22 @@
                                 </label>
                              </div>
 
-                             <button onclick="window.startIndividual()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-sm hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">Започни</button>
-                        </div>
+                             <button type="submit" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-sm hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">Започни</button>
+                        </form>
                     </div>
 
                     <!-- Card 2: Class Mode (Live) -->
                     <div class="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 hover:border-emerald-300 transition-all relative overflow-hidden">
                         <div class="absolute top-0 right-0 p-4 opacity-10 text-emerald-900"><i data-lucide="users" class="w-24 h-24"></i></div>
                         <h3 class="text-emerald-700 font-black text-xl mb-4 relative z-10 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5"></i> В Клас</h3>
-                        <div class="space-y-3 relative z-10">
-                            <!-- ID-тата тук трябва да съвпадат с app.js -->
+                        <!-- Wrapped in form for Enter key support and to fix DOM warning -->
+                        <form onsubmit="event.preventDefault(); window.joinLiveSession();" class="space-y-3 relative z-10">
+                            <!-- Correct IDs for app.js -->
                             <input type="text" id="live-student-name" placeholder="Твоето име" class="w-full p-4 bg-white rounded-2xl border-2 border-emerald-200 font-bold text-slate-700 outline-none focus:border-emerald-500 transition-all text-center">
                             <input type="number" id="live-pin" placeholder="ПИН Код" class="w-full p-4 bg-white rounded-2xl border-2 border-emerald-200 font-black text-slate-700 outline-none focus:border-emerald-500 transition-all text-center text-xl tracking-widest">
                             
-                            <button onclick="window.joinLiveSession()" class="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-sm hover:bg-emerald-600 transition-all shadow-md shadow-emerald-200">Влез в сесия</button>
-                        </div>
+                            <button type="submit" class="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-sm hover:bg-emerald-600 transition-all shadow-md shadow-emerald-200">Влез в сесия</button>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -80,14 +84,15 @@
             <div class="bg-slate-900 p-8 flex flex-col justify-center items-center text-white relative w-full md:w-[350px] lg:w-[400px] shrink-0 border-l border-slate-800">
                 <div class="w-full space-y-6 z-10">
                     <h2 id="auth-title" class="text-xl font-black text-center text-indigo-400 uppercase tracking-widest">Учители</h2>
-                    <div class="space-y-3">
+                    <!-- Wrapped in form -->
+                    <form onsubmit="event.preventDefault(); window.handleAuthSubmit();" class="space-y-3">
                         <input type="email" id="auth-email" placeholder="Email" class="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-all text-sm font-bold">
                         <input type="password" id="auth-password" placeholder="Парола" class="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-all text-sm font-bold">
                         <div id="auth-teacher-code-container" class="hidden">
                              <input type="password" id="auth-teacher-code" placeholder="Код за регистрация" class="w-full p-4 bg-amber-900/20 border border-amber-700/50 rounded-2xl text-amber-100 placeholder-amber-700/50 outline-none text-sm font-bold">
                         </div>
-                        <button id="auth-submit-btn" onclick="window.handleAuthSubmit()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-wider hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/50">Влез в панел</button>
-                    </div>
+                        <button type="submit" id="auth-submit-btn" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-wider hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/50">Влез в панел</button>
+                    </form>
                     <p id="auth-toggle-text" onclick="window.toggleAuthMode()" class="text-center text-[10px] text-slate-400 cursor-pointer hover:text-white transition-colors uppercase font-bold tracking-wider">Регистрация</p>
                 </div>
             </div>
@@ -241,7 +246,8 @@
 
                         <!-- FIXED QR FOOTER -->
                         <div id="host-qr-container" class="p-4 border-t border-slate-100 bg-slate-50 flex flex-col items-center justify-center shrink-0 transition-all">
-                             <!-- QR injected here -->
+                             <div class="w-8 h-8 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin mb-2"></div>
+                             <p class="text-[9px] text-slate-400 font-bold">Генериране...</p>
                         </div>
                     </div>
                 </div>
