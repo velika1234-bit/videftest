@@ -2224,7 +2224,10 @@ window.requestStorageAccess = async function() {
     }
 };
 // --- АДМИНИСТРАТОРСКИ ПАНЕЛ (само за admin) ---
-const isCurrentUserAdmin = () => !!user && (user.uid === ADMIN_UID || currentAccessLevel === 'admin');
+const isCurrentUserAdmin = () => {
+    const activeUid = user?.uid || auth.currentUser?.uid || null;
+    return !!activeUid && (activeUid === ADMIN_UID || currentAccessLevel === 'admin');
+};
 
 const setAdminLoading = (isLoading) => {
     const loadingEl = document.getElementById('admin-loading');
