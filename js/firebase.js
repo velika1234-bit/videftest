@@ -21,27 +21,41 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const functions = getFunctions(app, 'us-central1');
 
+// --- Идентификатори на приложението ---
 export const finalAppId = 'videoquiz-ultimate-live';
 export const legacyAppId = 'videoquiz-ultimate';
 
-// Помощни функции за пътища
+// --- Помощни функции за пътища във Firestore ---
+
+// За соло резултати на учител
 export const getTeacherSoloResultsCollection = (teacherId) => 
     collection(db, 'artifacts', finalAppId, 'users', teacherId, 'solo_results');
 
+// За колекция с уроци на учител (може да се подаде appId за съвместимост)
 export const getTeacherQuizzesCollection = (teacherId, appId = finalAppId) => 
     collection(db, 'artifacts', appId, 'users', teacherId, 'my_quizzes');
 
+// За сесия (основен документ)
 export const getSessionRefById = (id) => 
     doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
 
+// За участници в сесия (нов път)
 export const getParticipantsCollection = (id) => 
     collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id, 'participants');
 
 export const getParticipantRef = (sessionId, participantId) => 
     doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', sessionId, 'participants', participantId);
 
+// За legacy участници (стар път)
 export const getLegacyParticipantsCollection = () => 
     collection(db, 'artifacts', finalAppId, 'public', 'data', 'participants');
 
 export const getLegacyParticipantRef = (participantId) => 
     doc(db, 'artifacts', finalAppId, 'public', 'data', 'participants', participantId);
+
+// --- Универсална функция за достъп до участник (избира нов или стар път според режима) ---
+// Забележка: participantStorageMode идва от app.js (глобално състояние)
+export const getActiveParticipantRef = (sessionId, participantId, participantStorageMode) => 
+    participantStorageMode === 'legacy' 
+        ? getLegacyParticipantRef(participantId) 
+        : getParticipantRef(sessionId, participantId);
