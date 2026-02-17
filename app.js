@@ -27,7 +27,6 @@ import {
     getParticipantRef,
     getLegacyParticipantsCollection,
     getLegacyParticipantRef,
-    getActiveParticipantRef    // <- добавете този ред
 } from './js/firebase.js';
 // --- Останали Firebase импорти (от CDN) ---
 import {
