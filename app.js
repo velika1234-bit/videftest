@@ -137,6 +137,7 @@ window.generateQRCode = function(text, canvasId) {
 // AUTH LOGIC
 // ==========================================
 onAuthStateChanged(auth, async (u) => {
+    console.log("onAuthStateChanged извикан с user:", u);
     const incomingUid = u?.uid || null;
     const userEmailDisplay = document.getElementById('user-email-display');
     if (userEmailDisplay) {
@@ -172,13 +173,16 @@ onAuthStateChanged(auth, async (u) => {
 
         const profileRef = doc(db, 'artifacts', finalAppId, 'users', user.uid, 'settings', 'profile');
         try {
+            console.error("Грешка при четене на профила:", e);
             const profileSnap = await getDoc(profileRef);
+            console.log("Ще четем profileRef");
             if (profileSnap.exists() && profileSnap.data().role === 'teacher') {
                 isTeacher = true;
                 window.loadMyQuizzes();
                 window.loadSoloResults();
                 if (!document.getElementById('screen-welcome').classList.contains('hidden')) {
                     window.switchScreen('teacher-dashboard');
+                    console.log("profileSnap exists:", profileSnap.exists());
                 }
             } else if (!isAnon) {
                 window.switchScreen('welcome');
@@ -1799,14 +1803,20 @@ window.onYouTubeIframeAPIReady = function() {
 // ИНИЦИАЛИЗАЦИЯ
 // ==========================================
 const initAuth = async () => {
+    console.log("initAuth започна");
     await setPersistence(auth, browserLocalPersistence);
+    console.log("setPersistence OK");
 
     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        
+        console.log("Опит за вход с custom token");
+        console.log("signInWithCustomToken OK");
         try {
             await signInWithCustomToken(auth, __initial_auth_token);
         } catch (e) {
             if (e.code === 'auth/custom-token-mismatch') {
                 console.warn("Служебният токен е игнориран (Private Config).");
+                console.error("Грешка при custom token:", e);
             } else {
                 console.error("Custom token auth failed", e);
             }
