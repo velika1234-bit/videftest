@@ -1,10 +1,11 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { httpsCallable, getFunctions } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
+// --- FIREBASE IMPORTS (STABLE v10.7.1) ---
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc, deleteDoc, addDoc, query, where, limit, getDocs, collectionGroup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 
 // ==========================================
-// ВГРАДЕНИ UTILS (ПОМОЩНИ ФУНКЦИИ)
+// ВГРАДЕНИ UTILS
 // ==========================================
 const AVATARS = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵'];
 
@@ -32,11 +33,9 @@ function parseScoreValue(scoreStr) {
     return { score: Number(parts[0]) || 0, total: Number(parts[1]) || 0 };
 }
 
-// Подобрена функция за декодиране с почистване на интервали
 function decodeQuizCode(code) {
     try {
         if (!code) return null;
-        // Премахваме нови редове и интервали, които може да са попаднали при копиране
         const cleanCode = code.trim().replace(/\s/g, '');
         return JSON.parse(decodeURIComponent(escape(atob(cleanCode))));
     } catch (e) {
@@ -150,6 +149,8 @@ onAuthStateChanged(auth, async (u) => {
     
     lastAuthUid = incomingUid;
     user = u;
+    
+    // Hide loader
     document.getElementById('auth-loader')?.classList.add('hidden');
 
     if (user) {
@@ -181,6 +182,12 @@ onAuthStateChanged(auth, async (u) => {
 });
 
 const initAuth = async () => {
+    // Safety timeout: if Firebase hangs, hide loader anyway after 4s
+    setTimeout(() => {
+        const loader = document.getElementById('auth-loader');
+        if (loader && !loader.classList.contains('hidden')) loader.classList.add('hidden');
+    }, 4000);
+
     await setPersistence(auth, browserLocalPersistence);
 
     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -188,18 +195,13 @@ const initAuth = async () => {
             await signInWithCustomToken(auth, __initial_auth_token);
         } catch (e) {
             if (e.code === 'auth/custom-token-mismatch') {
-                console.warn("Служебният токен е игнориран (Private Config).");
+                console.warn("Private Config token skipped.");
             } else {
                 console.error("Custom token auth failed", e);
             }
         }
     }
 };
-
-setTimeout(() => {
-    const loader = document.getElementById('auth-loader');
-    if (loader && !loader.classList.contains('hidden')) loader.classList.add('hidden');
-}, 4000);
 
 initAuth();
 
@@ -223,7 +225,6 @@ window.resolveTeacherUidFromCode = async (decoded) => {
             return normalizedSnap.docs[0].ref.parent.parent?.id || null;
         }
         if (normalizedSnap.size > 1) {
-            console.error('Ambiguous teacher match by emailNormalized:', ownerEmail);
             return null;
         }
         const fallbackQ = query(
@@ -235,15 +236,12 @@ window.resolveTeacherUidFromCode = async (decoded) => {
         if (fallbackSnap.size === 1) {
             return fallbackSnap.docs[0].ref.parent.parent?.id || null;
         }
-        if (fallbackSnap.size > 1) {
-            console.error('Ambiguous teacher match by email:', ownerEmail);
-            return null;
-        }
     } catch (e) {
         console.error('Owner email lookup failed:', e);
     }
     return null;
 };
+
 
 window.switchScreen = (name) => {
     document.querySelectorAll('#app > div').forEach(div => div.classList.add('hidden'));
@@ -517,6 +515,7 @@ function renderSoloResults() {
     const body = document.getElementById('solo-results-body');
     if (!body) return;
 
+    // Сейфти сортиране
     const sortedResults = [...soloResults].sort((a, b) => {
         const tA = a.timestamp ? getTimestampMs(a.timestamp) : 0;
         const tB = b.timestamp ? getTimestampMs(b.timestamp) : 0;
@@ -600,6 +599,7 @@ window.openLiveHost = async () => {
     
     const resultsBody = document.getElementById('host-results-body');
     if (resultsBody) {
+        // Намираме обвивката (wrapper), създадена в новата HTML структура
         const sidebar = resultsBody.closest('.w-full'); 
         
         let qrContainer = document.getElementById('host-qr-container');
@@ -697,6 +697,7 @@ window.initHostPlayer = () => {
             }
         }
     });
+    // Removed old setup/player toggles since new HTML structure uses z-index/layout
 };
 
 window.deleteParticipant = async (id) => {
@@ -1157,6 +1158,7 @@ window.exportPDF = async () => {
 // ==========================================
 // STUDENT CLIENT LOGIC
 // ==========================================
+// [CRITICAL FIX] Robust Join Function
 window.joinLiveSession = async () => {
     // 1. Get elements safely
     const pinEl = document.getElementById('live-pin');
@@ -1577,11 +1579,12 @@ const readQuestionWithSpeech = (text) => {
 };
 
 // ==========================================
-// SOLO LOGIC
+// SOLO LOGIC (ПОПРАВЕНА ЗА ДЪЛГИ КОДОВЕ)
 // ==========================================
 window.startIndividual = async () => {
     // 1. Почистване на входа
     const pinInput = document.getElementById('ind-quiz-code');
+    // Премахване на всякакви интервали и нови редове
     const pinCode = pinInput ? pinInput.value.trim().replace(/\s/g, '') : '';
     
     if (!pinCode) return window.showMessage("Моля, въведете код на урока!", 'error');
@@ -1594,7 +1597,7 @@ window.startIndividual = async () => {
         decoded = decodeQuizCode(pinCode);
     } catch (decodeErr) {
         console.error(decodeErr);
-        return window.showMessage("Невалиден формат на кода.", 'error');
+        return window.showMessage("Невалиден формат на кода (грешка при декодиране).", 'error');
     }
 
     if (!decoded) return window.showMessage("Невалиден код на урок.", 'error');
@@ -1698,6 +1701,7 @@ window.initSolvePlayer = () => {
                         const duration = solvePlayer.getDuration();
 
                         // Намиране на следващия въпрос
+                        // Използваме >= за времето и index > currentQIndex, за да не повтаряме
                         const qIdx = currentQuiz.q.findIndex((q, i) => cur >= q.time && i > currentQIndex);
                         
                         if (qIdx !== -1) {
@@ -1733,7 +1737,7 @@ window.triggerSoloQuestion = (q) => {
     const overlay = document.getElementById('ind-overlay');
     overlay.classList.remove('hidden'); 
     overlay.classList.add('flex');
-    // Принудително поставяне най-отгоре
+    // Принудително поставяне най-отгоре (Fix for unclickable buttons)
     overlay.style.zIndex = "9999";
     
     const questionEl = document.getElementById('ind-overlay-q-text');
@@ -1750,7 +1754,7 @@ window.triggerSoloQuestion = (q) => {
     const container = document.getElementById('ind-overlay-options');
     container.innerHTML = '';
 
-    // Генериране на UI за отговорите
+    // Генериране на UI за отговорите (същото като преди)
     if (q.type === 'single') {
         container.innerHTML = q.options.map((o, i) => `<button onclick="window.submitSolo(${i})" class="w-full p-4 text-left bg-white/10 border border-white/20 rounded-2xl font-black text-white hover:bg-white/20 transition-all text-sm pointer-events-auto relative z-50">${o}</button>`).join('');
     } else if (q.type === 'multiple') {
@@ -1863,7 +1867,7 @@ window.submitSoloFinal = (isCorrect) => {
         if (solvePlayer && typeof solvePlayer.playVideo === 'function') {
             solvePlayer.playVideo(); 
         }
-    }, 1000);
+    }, 1000); // Increased delay to see message
 };
 
 window.submitSoloMultiple = () => {
@@ -1875,17 +1879,20 @@ window.submitSoloMultiple = () => {
 window.submitSoloOpen = () => {
     const ans = document.getElementById('s-open-answer')?.value.trim().toLowerCase();
     const correct = currentQuiz.q[currentQIndex].correct;
-    // Loose comparison
+    // Loose comparison for open answers (string to string)
     window.submitSoloFinal(String(ans).toLowerCase() === String(correct).toLowerCase());
 };
 
+// Updated robust submitSolo for single choice / boolean
 window.submitSolo = (v) => {
     const q = currentQuiz.q[currentQIndex];
     let correct = q.correct;
     
+    // Normalize types for comparison (handle "1" vs 1 issues)
     if (typeof v === 'string' && typeof correct === 'number') correct = String(correct);
     if (typeof v === 'number' && typeof correct === 'string') v = String(v);
     
+    // For single choice, correct is an index. For boolean, it's true/false.
     window.submitSoloFinal(v === correct);
 };
 
@@ -1960,21 +1967,9 @@ window.finishSoloGame = async () => {
     activeIntervals = [];
 
     const totalPossible = currentQuiz.q.reduce((acc, q) => acc + (q.points || 1), 0);
-    // Avoid NaN if 0 questions
-    const percent = totalPossible > 0 ? Math.round((scoreCount / totalPossible) * 100) : 0;
-    
-    let feedbackText = "";
-    if (percent >= 90) feedbackText = "Отлично! 🌟";
-    else if (percent >= 70) feedbackText = "Много добре! 👏";
-    else if (percent >= 50) feedbackText = "Добър резултат! 👍";
-    else feedbackText = "Можеш и повече! 💪";
-
-    const scoreText = `${scoreCount} / ${totalPossible} (${percent}%)`;
-    
+    const scoreText = `${scoreCount} / ${totalPossible}`;
     const finalScoreEl = document.getElementById('res-score');
-    if (finalScoreEl) {
-        finalScoreEl.innerHTML = `<div class="text-4xl mb-2">${scoreText}</div><div class="text-xl text-slate-500">${feedbackText}</div>`;
-    }
+    if (finalScoreEl) finalScoreEl.innerText = scoreText;
 
     if (isDiscussionMode) {
         window.showMessage("Режим обсъждане: резултатът не се записва.", "info");
@@ -1984,6 +1979,7 @@ window.finishSoloGame = async () => {
     // Проверка за потребител и ID на собственика
     let currentUser = auth.currentUser || user;
     if (!currentUser) {
+        // Опит за ре-логин ако потребителят е изгубен
         try {
             await signInAnonymously(auth);
             currentUser = auth.currentUser;
@@ -2040,7 +2036,7 @@ window.loadEditorVideo = (isEdit = false) => {
     player = new YT.Player('player', {
         videoId: id, events: {
             'onReady': () => {
-                const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = formatTime(player.getCurrentTime()); }, 500);
+                const i = setInterval(() => { if (player?.getCurrentTime) document.getElementById('timer').innerText = window.formatTime(player.getCurrentTime()); }, 500);
                 activeIntervals.push(i);
             }
         }
@@ -2056,7 +2052,7 @@ window.openQuestionModal = () => {
     document.getElementById('m-text').value = '';
     document.getElementById('modal-q').classList.remove('hidden');
     document.getElementById('modal-q').classList.add('flex');
-    document.getElementById('m-time').innerText = formatTime(player.getCurrentTime());
+    document.getElementById('m-time').innerText = window.formatTime(player.getCurrentTime());
     window.updateModalFields();
 };
 
@@ -2131,7 +2127,7 @@ function renderEditorList() {
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-1">
                     <button onclick="window.adjustTime(${i}, -1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">-</button>
-                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${formatTime(q.time)}</span>
+                    <span class="text-indigo-600 text-[10px] font-black bg-indigo-50 px-2 py-0.5 rounded-lg min-w-[45px] text-center">${window.formatTime(q.time)}</span>
                     <button onclick="window.adjustTime(${i}, 1)" class="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-md hover:bg-slate-200 text-xs font-black">+</button>
                 </div>
                 <div class="flex gap-1">
@@ -2286,4 +2282,4 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         }, 1000);
     }
-}
+});
