@@ -1804,24 +1804,28 @@ window.onYouTubeIframeAPIReady = function() {
 // ==========================================
 const initAuth = async () => {
     console.log("initAuth започна");
-    await setPersistence(auth, browserLocalPersistence);
-    console.log("setPersistence OK");
+    try {
+        await setPersistence(auth, browserLocalPersistence);
+        console.log("setPersistence OK");
+    } catch (e) {
+        console.error("Грешка при setPersistence:", e);
+        // Ако има грешка, може да опитаме да продължим без persistence
+        // или да покажем съобщение на потребителя.
+        window.showMessage("Проблем с настройките за поверителност. Моля, разрешете localStorage за този сайт.", "error");
+    }
 
     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        
-        console.log("Опит за вход с custom token");
-        console.log("signInWithCustomToken OK");
         try {
             await signInWithCustomToken(auth, __initial_auth_token);
         } catch (e) {
             if (e.code === 'auth/custom-token-mismatch') {
                 console.warn("Служебният токен е игнориран (Private Config).");
-                console.error("Грешка при custom token:", e);
             } else {
                 console.error("Custom token auth failed", e);
             }
         }
     }
+    console.log("initAuth завърши");
 };
 
 setTimeout(() => {
