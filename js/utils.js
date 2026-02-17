@@ -1,10 +1,10 @@
 // ============================================
-// VideoQuiz Ultimate - Helper функции
+// Helper функции
 // ============================================
 
-// --- Време и дата ---
 export const formatTime = (s) => {
-    const m = Math.floor(s / 60), r = Math.floor(s % 60);
+    const m = Math.floor(s / 60);
+    const r = Math.floor(s % 60);
     return `${m < 10 ? '0' + m : m}:${r < 10 ? '0' + r : r}`;
 };
 
@@ -17,7 +17,7 @@ export const formatDate = (timestamp) => {
     });
 };
 
-const getTimestampMs = (value) => {
+export const getTimestampMs = (value) => {
     if (!value) return 0;
     if (typeof value === 'number') return value;
     if (typeof value?.toMillis === 'function') return value.toMillis();
@@ -26,7 +26,6 @@ const getTimestampMs = (value) => {
     return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-// --- Резултати и точки ---
 export const parseScoreValue = (scoreText) => {
     if (!scoreText) return { score: 0, total: 0 };
     const parts = String(scoreText).split('/').map(s => parseInt(s.trim(), 10));
@@ -35,7 +34,6 @@ export const parseScoreValue = (scoreText) => {
     return { score, total };
 };
 
-// --- Кодове и аватари ---
 export const decodeQuizCode = (code) => {
     if (!code) return null;
     try {
@@ -46,12 +44,8 @@ export const decodeQuizCode = (code) => {
     }
 };
 
-export const AVATARS = ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦", "🐤", "🦄", "🐝", "🦋", "🐌", "🐞", "🐙", "🐬"];
+export const AVATARS = ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🐤","🦄","🐝","🦋","🐌","🐞","🐙","🐬"];
 
-// --- Времева помощна ---
-export { getTimestampMs };
-
-// --- 🎲 Разбъркване на масив (Фишър-Йейтс) ---
 export const shuffleArray = (arr) => {
     const copy = [...arr];
     for (let i = copy.length - 1; i > 0; i--) {
