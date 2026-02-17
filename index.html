@@ -6,6 +6,7 @@
     <title>VideoQuiz Ultimate Pro</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
     
+    <!-- Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://www.youtube.com/iframe_api"></script>
@@ -15,8 +16,20 @@
     
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
     
+    <!-- Tailwind Configuration -->
     <script>
-        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Nunito', 'sans-serif'] }, colors: { brand: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 900: '#312e81' } } } } }
+        try {
+            if (typeof tailwind !== 'undefined') {
+                tailwind.config = { 
+                    theme: { 
+                        extend: { 
+                            fontFamily: { sans: ['Nunito', 'sans-serif'] }, 
+                            colors: { brand: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 900: '#312e81' } } 
+                        } 
+                    } 
+                }
+            }
+        } catch (e) { console.warn('Tailwind config error:', e); }
     </script>
 
     <style>
@@ -29,23 +42,25 @@
         #auth-loader { animation: auto-hide 4s linear forwards; pointer-events: none; }
         #ind-overlay { z-index: 2147483647 !important; }
         
-        /* Слайдер стилове */
-        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: #4f46e5; cursor: pointer; margin-top: -10px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: #e0e7ff; border-radius: 99px; }
+        .sop-text { font-size: 1.5rem !important; line-height: 1.3 !important; }
+        .sop-btn { font-size: 1.25rem !important; padding: 1.5rem !important; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-screen overflow-hidden selection:bg-brand-100 selection:text-brand-700">
 
     <div id="app" class="h-full flex flex-col relative">
+        <!-- Loader -->
         <div id="auth-loader" class="fixed inset-0 bg-white z-[9999] flex items-center justify-center flex-col gap-6 pointer-events-auto">
             <div class="relative"><div class="w-20 h-20 border-4 border-slate-100 rounded-full"></div><div class="w-20 h-20 border-4 border-brand-600 rounded-full animate-spin absolute top-0 left-0 border-t-transparent"></div><div class="absolute top-0 left-0 w-20 h-20 flex items-center justify-center text-2xl">🎓</div></div>
             <p class="font-black text-brand-900 text-lg tracking-widest animate-pulse">ЗАРЕЖДАНЕ...</p>
         </div>
+        
+        <!-- Toast Messages -->
         <div id="msg-container" class="fixed top-6 right-6 z-[10000] flex flex-col items-end pointer-events-none gap-2"></div>
 
         <!-- 1. ВХОД -->
         <div id="screen-welcome" class="flex h-full w-full bg-slate-50 relative z-10 overflow-hidden flex-col md:flex-row">
+            <!-- ЛЯВО: Ученик -->
             <div id="welcome-student-side" class="flex-1 relative flex flex-col justify-center items-center p-4 md:p-12 bg-white overflow-y-auto w-full h-full md:h-auto">
                 <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-brand-500 via-purple-500 to-pink-500"></div>
                 <div class="w-full max-w-lg space-y-6 animate-fade-in pb-20 md:pb-0">
@@ -53,25 +68,30 @@
                         <h1 class="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">VideoQuiz</h1>
                         <p class="text-slate-500 font-bold text-sm md:text-lg">Учи и се забавлявай!</p>
                     </div>
+                    
+                    <!-- Tabs Mobile -->
                     <div class="flex border-b border-slate-200 mb-4 md:hidden">
                         <button onclick="window.switchTab('solo')" id="tab-solo" class="flex-1 pb-2 text-sm font-bold text-brand-600 border-b-2 border-brand-600 transition-all">Самостоятелно</button>
                         <button onclick="window.switchTab('class')" id="tab-class" class="flex-1 pb-2 text-sm font-bold text-slate-400 border-b-2 border-transparent transition-all">В Клас</button>
                     </div>
-                    <!-- Карта: Индивидуално -->
+
+                    <!-- Карта: Индивидуално (Solo) -->
                     <div id="panel-solo" class="bg-white p-1 rounded-2xl border border-slate-200 shadow-lg shadow-slate-100/50">
                         <div class="bg-slate-50 rounded-xl p-5 border border-slate-100">
                             <div class="flex items-center gap-2 mb-3 text-brand-700"><i data-lucide="play-circle" class="w-5 h-5"></i><h3 class="font-black text-base">Самостоятелно</h3></div>
                             <form onsubmit="event.preventDefault(); window.startIndividual();" class="space-y-3">
-                                 <input type="text" id="ind-quiz-code" placeholder="Код на урок..." class="w-full p-3 bg-white rounded-xl border border-slate-200 font-bold text-slate-700 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 outline-none transition-all" autocomplete="off">
+                                 <input type="text" id="ind-student-name" placeholder="Твоето Име..." class="w-full p-3 bg-white rounded-xl border border-slate-200 font-bold text-slate-700 text-sm focus:border-brand-500 outline-none transition-all" autocomplete="off">
+                                 <input type="text" id="ind-quiz-code" placeholder="Код на урок..." class="w-full p-3 bg-white rounded-xl border border-slate-200 font-bold text-slate-700 text-sm focus:border-brand-500 outline-none transition-all" autocomplete="off">
                                  <div class="flex gap-2">
-                                    <label class="flex-1 flex items-center justify-center gap-1 cursor-pointer bg-white p-2 rounded-lg border border-slate-200 text-[10px] font-bold text-slate-600"><input type="checkbox" id="ind-sop-mode" class="accent-brand-600"> СОП</label>
-                                    <label class="flex-1 flex items-center justify-center gap-1 cursor-pointer bg-white p-2 rounded-lg border border-slate-200 text-[10px] font-bold text-slate-600"><input type="checkbox" id="ind-discussion-mode" class="accent-amber-500"> Обсъждане</label>
+                                    <label class="flex-1 flex items-center justify-center gap-1 cursor-pointer bg-white p-2 rounded-lg border border-slate-200 text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors" title="Специални Образователни Потребности"><input type="checkbox" id="ind-sop-mode" class="accent-brand-600 mr-1"> СОП 🔊</label>
+                                    <label class="flex-1 flex items-center justify-center gap-1 cursor-pointer bg-white p-2 rounded-lg border border-slate-200 text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors"><input type="checkbox" id="ind-discussion-mode" class="accent-amber-500 mr-1"> Обсъждане</label>
                                  </div>
                                  <button type="submit" class="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-md active:scale-[0.98] transition-all">Старт</button>
                             </form>
                         </div>
                     </div>
-                    <!-- Карта: В Клас -->
+
+                    <!-- Карта: В Клас (Live) -->
                     <div id="panel-class" class="hidden md:block relative group">
                         <div class="absolute -inset-0.5 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-2xl opacity-30 blur"></div>
                         <div class="relative bg-white p-5 rounded-2xl border border-slate-100 shadow-xl">
@@ -85,10 +105,12 @@
                             </form>
                         </div>
                     </div>
+                    
                     <div class="md:hidden text-center pt-4"><button onclick="window.toggleMobileView('teacher')" class="text-xs font-bold text-slate-400 hover:text-brand-600 underline">Учителски Вход &rarr;</button></div>
                 </div>
             </div>
-            <!-- Дясно: Учители -->
+
+            <!-- ДЯСНО: Учител -->
             <div id="welcome-teacher-side" class="hidden md:flex w-full md:w-[400px] lg:w-[450px] bg-slate-900 text-white p-8 flex-col justify-center relative overflow-hidden shrink-0 h-full">
                 <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
                 <button onclick="window.toggleMobileView('student')" class="md:hidden absolute top-6 left-6 text-slate-400 hover:text-white flex items-center gap-2 font-bold text-sm"><i data-lucide="arrow-left" class="w-4 h-4"></i> Назад</button>
@@ -105,7 +127,7 @@
             </div>
         </div>
 
-        <!-- 2. ЕКРАН: УЧИТЕЛСКИ ПАНЕЛ -->
+        <!-- 2. ЕКРАН: УЧИТЕЛСКИ ПАНЕЛ (Dashboard) -->
         <div id="screen-teacher-dashboard" class="hidden h-full flex flex-col bg-slate-50 absolute inset-0 z-20">
              <header class="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center sticky top-0 z-20 shadow-sm">
                  <div class="flex items-center gap-3"><div class="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-200"><i data-lucide="library" class="w-5 h-5"></i></div><div class="hidden sm:block"><h1 class="font-black text-slate-800 text-lg leading-tight">Библиотека</h1><p id="user-email-display" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">...</p></div></div>
@@ -117,12 +139,40 @@
                  </div>
              </header>
              <main class="flex-1 overflow-y-auto p-4 md:p-6 max-w-7xl mx-auto w-full space-y-6">
+                 <!-- My Quizzes -->
                  <section><div class="flex justify-between items-end mb-4"><h2 class="text-lg md:text-xl font-black text-slate-800">Вашите Уроци</h2></div><div id="my-quizzes-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div></section>
-                 <section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden"><div class="p-5 border-b border-slate-100 flex flex-row justify-between items-center bg-slate-50/50"><h2 class="font-black text-slate-800 text-sm md:text-lg">История</h2><button onclick="window.exportSoloResultsExcel()" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg font-bold text-[10px] md:text-xs hover:bg-slate-50 flex items-center gap-2">Excel</button></div><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider border-b border-slate-100"><tr><th class="p-4 pl-6">Ученик</th><th class="p-4">Урок</th><th class="p-4">Дата</th><th class="p-4 text-right">Резултат</th><th class="p-4 text-center">Триене</th></tr></thead><tbody id="solo-results-body" class="divide-y divide-slate-50"></tbody></table></div></section>
+                 
+                 <!-- History Section with Tabs -->
+                 <section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                     <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50/50 gap-4">
+                        <div class="flex items-center gap-4 bg-white p-1 rounded-xl border border-slate-200">
+                             <button onclick="window.switchHistoryTab('solo')" id="hist-tab-solo" class="px-4 py-2 rounded-lg font-bold text-xs transition-all bg-brand-600 text-white shadow-sm">Индивидуални</button>
+                             <button onclick="window.switchHistoryTab('class')" id="hist-tab-class" class="px-4 py-2 rounded-lg font-bold text-xs transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50">В Клас</button>
+                        </div>
+                        <button onclick="window.exportSoloResultsExcel()" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg font-bold text-[10px] md:text-xs hover:bg-slate-50 flex items-center gap-2 shadow-sm">📊 Excel Експорт</button>
+                     </div>
+                     
+                     <!-- Solo Table -->
+                     <div id="hist-view-solo" class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider border-b border-slate-100"><tr><th class="p-4 pl-6">Ученик</th><th class="p-4">Урок</th><th class="p-4">Дата</th><th class="p-4 text-right">Резултат</th><th class="p-4 text-center">Действие</th></tr></thead>
+                            <tbody id="solo-results-body" class="divide-y divide-slate-50"></tbody>
+                        </table>
+                     </div>
+
+                     <!-- Class Table -->
+                     <div id="hist-view-class" class="hidden overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider border-b border-slate-100"><tr><th class="p-4 pl-6">Дата</th><th class="p-4">Урок</th><th class="p-4">ПИН</th><th class="p-4 text-center">Инфо</th><th class="p-4 text-center">Действие</th></tr></thead>
+                            <tbody id="class-results-body" class="divide-y divide-slate-50"></tbody>
+                        </table>
+                        <div id="class-history-empty" class="hidden p-8 text-center text-slate-400 text-sm font-bold">Няма запазени класни сесии.</div>
+                     </div>
+                 </section>
              </main>
         </div>
 
-        <!-- 3. ЕКРАН: РЕДАКТОР (С НОВИ ТИПОВЕ) -->
+        <!-- 3. ЕКРАН: РЕДАКТОР -->
         <div id="screen-create" class="hidden h-full flex flex-col bg-slate-100 absolute inset-0 z-30">
             <header class="bg-white border-b px-6 py-3 flex justify-between items-center sticky top-0 z-30 shadow-sm">
                 <div class="flex items-center gap-4"><button onclick="window.switchScreen('teacher-dashboard')" class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all"><i data-lucide="arrow-left" class="w-5 h-5"></i></button><h2 class="font-black text-slate-800 text-lg">Редактор</h2></div>
@@ -151,7 +201,21 @@
                 <div class="flex-1 bg-black rounded-2xl shadow-xl overflow-hidden relative border-4 border-white/20 group min-h-[300px]">
                     <div id="host-video-container" class="w-full h-full"></div>
                     <div class="absolute bottom-4 right-4 pointer-events-none"><div class="bg-black/60 backdrop-blur-md border border-white/10 text-white font-black text-4xl px-6 py-2 rounded-2xl shadow-lg" id="host-timer">00:00</div></div>
-                    <div id="host-setup-area" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20 backdrop-blur-sm gap-6"><button onclick="window.initHostPlayer()" class="px-10 py-5 bg-brand-600 text-white rounded-2xl font-black text-2xl hover:bg-brand-500 shadow-2xl flex items-center gap-3"><i data-lucide="play" class="w-8 h-8 fill-current"></i> СТАРТ</button><p class="text-slate-400 font-bold">Изчакайте всички да се присъединят.</p></div>
+                    
+                    <!-- Host Overlay: START -->
+                    <div id="host-setup-area" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20 backdrop-blur-sm gap-6">
+                        <button onclick="window.initHostPlayer()" class="px-10 py-5 bg-brand-600 text-white rounded-2xl font-black text-2xl hover:bg-brand-500 shadow-2xl flex items-center gap-3"><i data-lucide="play" class="w-8 h-8 fill-current"></i> СТАРТ</button>
+                        <p class="text-slate-400 font-bold">Изчакайте всички да се присъединят.</p>
+                    </div>
+
+                    <!-- Host Overlay: RESUME (New) -->
+                    <div id="host-resume-overlay" class="hidden absolute inset-0 flex-col items-center justify-center bg-black/80 z-30 backdrop-blur-sm gap-6 animate-fade-in">
+                        <div class="text-white text-3xl font-black mb-4">Въпросът е активен!</div>
+                        <button onclick="window.resumeHostSession()" class="px-10 py-5 bg-emerald-500 text-white rounded-2xl font-black text-2xl hover:bg-emerald-600 shadow-2xl flex items-center gap-3 transform hover:scale-105 transition-all">
+                            <i data-lucide="play-circle" class="w-8 h-8"></i> ПРОДЪЛЖИ ВИДЕОТО
+                        </button>
+                    </div>
+
                 </div>
                 <div class="w-full lg:w-80 flex flex-col shrink-0 bg-white border-l border-slate-200 z-30 shadow-2xl h-1/3 lg:h-full">
                     <div class="p-3 border-b border-slate-100 bg-slate-50"><h3 class="font-black text-slate-800 uppercase text-xs flex items-center gap-2"><i data-lucide="trophy" class="w-4 h-4 text-amber-500"></i> Класиране</h3></div>
@@ -161,7 +225,7 @@
             </div>
         </div>
 
-        <!-- 5. ЕКРАН: УЧЕНИК -->
+        <!-- 5. ЕКРАН: УЧЕНИК (Live Client) -->
         <div id="screen-live-client" class="hidden h-full flex flex-col bg-slate-50 absolute inset-0 z-50 overflow-hidden">
             <div class="absolute top-0 left-0 w-full h-2 bg-brand-500 z-20"></div>
             <div id="client-waiting" class="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-8 animate-fade-in">
@@ -172,7 +236,6 @@
             <div id="client-question" class="hidden flex-1 flex flex-col p-6 pb-32 overflow-y-auto animate-fade-in">
                 <div class="bg-white p-6 rounded-3xl shadow-lg border-b-8 border-slate-100 mb-6 text-center"><p id="live-q-text-client" class="text-xl font-black text-slate-800 leading-snug">...</p></div>
                 <div id="live-options-client" class="space-y-4 max-w-md mx-auto w-full"></div>
-                <!-- БУТОН ЗА ПОТВЪРЖДЕНИЕ -->
                 <button id="live-confirm-btn" onclick="window.confirmLiveAnswer()" class="hidden fixed bottom-6 left-6 right-6 py-4 bg-brand-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-brand-500/40 hover:bg-brand-700 transition-all z-50">ПОТВЪРДИ ОТГОВОРА</button>
             </div>
             <div id="client-finished" class="hidden flex-1 flex flex-col items-center justify-center p-8 bg-brand-600 text-white text-center absolute inset-0 z-50">
@@ -183,12 +246,15 @@
             </div>
         </div>
 
-        <!-- 6. ЕКРАН: ИНДИВИДУАЛНО -->
+        <!-- 6. ЕКРАН: ИНДИВИДУАЛНО (Solo Question Overlay) -->
         <div id="screen-solve" class="hidden h-full flex flex-col bg-black absolute inset-0 z-50">
             <div class="flex-1 relative flex items-center justify-center">
                 <div id="solve-player-container" class="w-full h-full absolute inset-0"></div>
                 <div id="ind-overlay" class="absolute inset-0 bg-slate-900/95 z-[9999] hidden flex-col items-center justify-center p-6 sm:p-10 animate-fade-in overflow-y-auto">
-                    <div class="w-full max-w-2xl space-y-10 text-center">
+                    <div class="w-full max-w-2xl space-y-10 text-center relative">
+                         <!-- SOP Speak Button -->
+                         <button onclick="window.speakQuestion()" id="ind-speak-btn" class="hidden absolute -top-12 right-0 p-3 bg-brand-600 text-white rounded-full shadow-lg hover:bg-brand-500" title="Прочети въпроса"><i data-lucide="volume-2" class="w-6 h-6"></i></button>
+                         
                          <h2 id="ind-overlay-q-text" class="font-black text-white leading-tight drop-shadow-lg text-3xl">Въпрос?</h2>
                          <div id="ind-overlay-options" class="grid gap-4 w-full"></div>
                          <button id="ind-confirm-btn" onclick="window.confirmSoloAnswer()" class="hidden w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-lg hover:bg-indigo-700 transition-all mt-4">ПОТВЪРДИ ОТГОВОРА</button>
@@ -253,6 +319,28 @@
                 <button onclick="window.requestStorageAccess()" class="w-full py-4 bg-brand-600 text-white rounded-xl font-black uppercase text-sm hover:bg-brand-700 shadow-lg">Опитай пак</button>
             </div>
         </div>
+
+        <!-- NEW: Class Session Results Modal -->
+        <div id="modal-class-results" class="hidden fixed inset-0 bg-black/60 z-[100] items-center justify-center p-4 backdrop-blur-md">
+            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden animate-pop border border-slate-200">
+                <div class="p-6 border-b bg-slate-50 flex justify-between items-center">
+                    <div>
+                        <h3 class="font-black text-xl text-slate-800">Резултати от Сесия</h3>
+                        <p id="m-class-res-title" class="text-xs font-bold text-brand-600 uppercase mt-1">...</p>
+                    </div>
+                    <button onclick="document.getElementById('modal-class-results').classList.add('hidden')" class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200 text-slate-500 hover:bg-rose-100 hover:text-rose-500"><i data-lucide="x" class="w-5 h-5"></i></button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-0">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider sticky top-0">
+                            <tr><th class="p-4 pl-6">Ученик</th><th class="p-4 text-right">Точки</th></tr>
+                        </thead>
+                        <tbody id="m-class-res-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- === ЛОГИКА === -->
@@ -267,78 +355,119 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
-        const FIXED_TEACHER_ID = 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; 
-
+        
         // STATE
         let user=null, isTeacher=false, currentQuiz=null, player=null, solvePlayer=null, hostPlayer=null;
         let questions=[], sessionID="", liveActiveQIdx=-1, sessionDocId="", liveScore=0;
-        let unsubscribes=[], activeIntervals=[], lastFetchedParticipants=[], soloResults=[], myQuizzes=[];
-        let authMode='login', soloGameFinished=false, currentParticipantRef=null, sopModeEnabled=false, isDiscussionMode=false, studentNameValue="";
-        let currentQuizOwnerId=null, editingQuizId=null, currentVideoId="";
-        let tempSelectedAnswer = null; // New state for confirmation
+        let activeIntervals=[], lastFetchedParticipants=[], soloResults=[], myQuizzes=[], classHistory=[];
+        let authMode='login', soloGameFinished=false, sopModeEnabled=false, isDiscussionMode=false, studentNameValue="";
+        let currentQuizOwnerId=null, currentVideoId="";
+        let tempSelectedAnswer = null; 
+        let lastAnsweredIndex = -1; 
+        let activeHistoryTab = 'solo';
 
         // UTILS
         const AVATARS = ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵'];
         function formatTime(s){const m=Math.floor(s/60),sc=Math.floor(s%60);return`${m}:${sc<10?'0':''}${sc}`}
         function formatDate(ts){if(!ts)return'';const d=ts.toDate?ts.toDate():new Date(ts);return d.toLocaleString('bg-BG')}
         function getTimestampMs(ts){return ts?(ts.toMillis?ts.toMillis():ts.seconds*1000):0}
-        function parseScoreValue(s){if(!s)return{score:0,total:0};const p=s.split('/');return{score:Number(p[0])||0,total:Number(p[1])||0}}
         function decodeQuizCode(c){try{if(!c)return null;return JSON.parse(decodeURIComponent(escape(atob(c.trim().replace(/\s/g,'')))))}catch(e){return null}}
 
-        // EXPORTS
+        // EXPORTS & UI
         window.toggleMobileView=(view)=>{document.getElementById('welcome-student-side').classList.toggle('hidden',view!=='student');document.getElementById('welcome-teacher-side').classList.toggle('hidden',view!=='teacher');document.getElementById('welcome-teacher-side').classList.toggle('flex',view==='teacher')};
         window.switchTab=(tab)=>{document.getElementById('panel-solo').classList.toggle('hidden',tab!=='solo');document.getElementById('panel-class').classList.toggle('hidden',tab!=='class');document.getElementById('tab-solo').className=tab==='solo'?"flex-1 pb-2 text-sm font-bold text-brand-600 border-b-2 border-brand-600 transition-all":"flex-1 pb-2 text-sm font-bold text-slate-400 border-b-2 border-transparent transition-all";document.getElementById('tab-class').className=tab==='class'?"flex-1 pb-2 text-sm font-bold text-emerald-600 border-b-2 border-emerald-600 transition-all":"flex-1 pb-2 text-sm font-bold text-slate-400 border-b-2 border-transparent transition-all"};
 
-        // --- SOLO LOGIC (NEW CONFIRMATION) ---
+        // --- HISTORY TABS LOGIC ---
+        window.switchHistoryTab = (tab) => {
+            activeHistoryTab = tab;
+            document.getElementById('hist-tab-solo').className = tab === 'solo' ? "px-4 py-2 rounded-lg font-bold text-xs transition-all bg-brand-600 text-white shadow-sm" : "px-4 py-2 rounded-lg font-bold text-xs transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50";
+            document.getElementById('hist-tab-class').className = tab === 'class' ? "px-4 py-2 rounded-lg font-bold text-xs transition-all bg-brand-600 text-white shadow-sm" : "px-4 py-2 rounded-lg font-bold text-xs transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50";
+            document.getElementById('hist-view-solo').classList.toggle('hidden', tab !== 'solo');
+            document.getElementById('hist-view-class').classList.toggle('hidden', tab !== 'class');
+        };
+
+        // --- SOLO LOGIC (Improved) ---
         window.startIndividual = async () => {
              const code = document.getElementById('ind-quiz-code').value.trim().replace(/\s/g, '');
+             const nameInput = document.getElementById('ind-student-name').value.trim();
+             
              if(!code) return window.showMessage("Въведете код!", "error");
              const dec = decodeQuizCode(code); if(!dec || !dec.v) return window.showMessage("Невалиден код", "error");
-             currentQuiz = dec; sopModeEnabled = document.getElementById('ind-sop-mode').checked; isDiscussionMode = document.getElementById('ind-discussion-mode').checked;
-             if(!isDiscussionMode){ studentNameValue = prompt("Име:") || "Анонимен"; }
+             
+             currentQuiz = dec; 
+             sopModeEnabled = document.getElementById('ind-sop-mode').checked; 
+             isDiscussionMode = document.getElementById('ind-discussion-mode').checked;
+             studentNameValue = nameInput || "Анонимен";
+             
              if(!auth.currentUser) await signInAnonymously(auth);
              window.switchScreen('solve');
+             
              setTimeout(() => {
                  document.getElementById('solve-player-container').innerHTML = '<div id="solve-player"></div>';
                  solvePlayer = new YT.Player('solve-player', { videoId: currentQuiz.v, width:'100%', height:'100%', playerVars:{autoplay:1, controls:1}, events: {
                      'onStateChange': (e) => {
-                         if(e.data === 1) {
+                         if(e.data === 1) { // Playing
                              activeIntervals.forEach(clearInterval); activeIntervals=[];
                              const i = setInterval(() => {
                                  const t = Math.floor(solvePlayer.getCurrentTime());
-                                 const qIdx = currentQuiz.q.findIndex((q,i)=>t>=q.time && q.time > (window.lastAnsweredIdx||-1));
-                                 if(qIdx !== -1) { window.triggerSoloQuestion(currentQuiz.q[qIdx]); window.lastAnsweredIdx = currentQuiz.q[qIdx].time; }
-                                 if(solvePlayer.getDuration()>0 && t>=solvePlayer.getDuration()-1)window.finishSoloGame();
+                                 const qIdx = currentQuiz.q.findIndex((q, i) => i > lastAnsweredIndex && t >= q.time);
+                                 if(qIdx !== -1) { 
+                                    window.triggerSoloQuestion(currentQuiz.q[qIdx], qIdx); 
+                                    lastAnsweredIndex = qIdx;
+                                 }
+                                 if(solvePlayer.getDuration()>0 && t>=solvePlayer.getDuration()-1) window.finishSoloGame();
                              }, 500); activeIntervals.push(i);
-                         }else if(e.data===0)window.finishSoloGame();
+                         } else if(e.data===0) window.finishSoloGame();
                      }
                  }});
              }, 500);
         };
         
-        window.triggerSoloQuestion = (q) => {
+        let currentQIndex = -1; 
+        let scoreCount = 0;
+
+        window.triggerSoloQuestion = (q, idx) => {
+            currentQIndex = idx;
             solvePlayer.pauseVideo();
             const ov = document.getElementById('ind-overlay');
             ov.classList.remove('hidden'); ov.classList.add('flex');
+            
             const txt = document.getElementById('ind-overlay-q-text');
             txt.innerText = q.text;
-            txt.className = sopModeEnabled ? "font-black text-white text-4xl md:text-6xl drop-shadow-lg leading-tight" : "font-black text-white text-2xl md:text-4xl drop-shadow-lg leading-tight";
             
-            if(sopModeEnabled && 'speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(q.text); u.lang='bg-BG'; window.speechSynthesis.speak(u); }
+            if(sopModeEnabled) {
+                txt.classList.add('sop-text');
+                document.getElementById('ind-speak-btn').classList.remove('hidden');
+                window.speakQuestion(q.text);
+            } else {
+                txt.classList.remove('sop-text');
+                document.getElementById('ind-speak-btn').classList.add('hidden');
+            }
             
             const c = document.getElementById('ind-overlay-options'); c.innerHTML = '';
             tempSelectedAnswer = null;
-            document.getElementById('ind-confirm-btn').classList.add('hidden'); // Hide confirm initially
+            document.getElementById('ind-confirm-btn').classList.add('hidden');
+
+            const btnClass = sopModeEnabled ? "option-btn sop-btn w-full bg-white/10 hover:bg-white/20 border-2 border-white/20 rounded-2xl text-white font-bold text-left backdrop-blur-md transition-all shadow-lg mb-2" : "option-btn w-full p-5 bg-white/10 hover:bg-white/20 border-2 border-white/20 rounded-2xl text-white font-bold text-xl text-left backdrop-blur-md transition-all hover:scale-[1.01] active:scale-95 shadow-lg";
 
             if(q.type === 'single' || q.type === 'boolean') {
                  const opts = q.type==='boolean' ? ['ДА', 'НЕ'] : q.options;
-                 c.innerHTML = opts.map((o,i)=>`<button onclick="window.selectOptionSolo(this, ${q.type==='boolean'?i===0:i})" class="option-btn w-full p-5 bg-white/10 hover:bg-white/20 border-2 border-white/20 rounded-2xl text-white font-bold text-xl text-left backdrop-blur-md pointer-events-auto transition-all hover:scale-[1.01] active:scale-95 shadow-lg">${o}</button>`).join('');
+                 c.innerHTML = opts.map((o,i)=>`<button onclick="window.selectOptionSolo(this, ${q.type==='boolean'?i===0:i})" class="${btnClass}">${o}</button>`).join('');
             } else if (q.type === 'numeric_slider') {
                  c.innerHTML = `<div class="w-full bg-white/20 p-6 rounded-2xl"><input type="range" id="solo-range" min="${q.min}" max="${q.max}" step="${q.step}" class="w-full h-4 bg-gray-200 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('solo-range-val').innerText=this.value"><div class="text-white text-4xl font-black mt-4" id="solo-range-val">${(q.min+q.max)/2}</div></div>`;
-                 document.getElementById('ind-confirm-btn').classList.remove('hidden'); // Always show confirm for slider
+                 document.getElementById('ind-confirm-btn').classList.remove('hidden');
             } else if (q.type === 'ordering') {
-                 // Simple ordering UI
                  c.innerHTML = q.options.map((o,i)=>`<button onclick="window.orderItemSolo(this,${i})" class="order-btn w-full p-4 bg-white/10 border border-white/30 rounded-xl text-white font-bold mb-2 text-left pointer-events-auto">${o}</button>`).join('');
+                 document.getElementById('ind-confirm-btn').classList.remove('hidden');
+            }
+        };
+
+        window.speakQuestion = (text) => {
+            if('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text || document.getElementById('ind-overlay-q-text').innerText);
+                u.lang = 'bg-BG'; u.rate = 0.9;
+                window.speechSynthesis.speak(u);
             }
         };
 
@@ -350,16 +479,15 @@
         };
 
         window.confirmSoloAnswer = () => {
+            if (!currentQuiz || !currentQuiz.q || currentQIndex < 0) return;
             const q = currentQuiz.q[currentQIndex];
+            
             let isCor = false;
-            if (q.type === 'single' || q.type === 'boolean') {
-                 isCor = (tempSelectedAnswer === q.correct);
-            } else if (q.type === 'numeric_slider') {
+            if (q.type === 'single' || q.type === 'boolean') isCor = (tempSelectedAnswer === q.correct);
+            else if (q.type === 'numeric_slider') {
                  const val = Number(document.getElementById('solo-range').value);
                  isCor = Math.abs(val - q.correct) <= (q.tolerance || 0);
-            } else {
-                 isCor = true; // Placeholder for complex types
-            }
+            } else isCor = true;
             
             if(isCor) { scoreCount += (q.points || 1); window.showMessage("ВЯРНО! 🎉", "success"); } 
             else window.showMessage("ГРЕШНО... 😢", "error");
@@ -385,7 +513,73 @@
             }
         };
 
-        // --- LIVE CLIENT (WITH CONFIRMATION) ---
+        // --- LIVE HOST LOGIC ---
+        window.openLiveHost=async()=>{ 
+            sessionID=Math.floor(1000+Math.random()*9000).toString(); sessionDocId=sessionID; window.switchScreen('live-host'); document.getElementById('host-pin').innerText=sessionID; 
+            const qrUrl=`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.origin+window.location.pathname+'?pin='+sessionID)}`; 
+            document.getElementById('host-qr-container').innerHTML=`<div class="text-[10px] uppercase font-black text-slate-400 mb-2 tracking-widest">QR Вход</div><img src="${qrUrl}" class="w-32 h-32 rounded-xl border-4 border-white shadow-md"><div class="text-[9px] text-slate-300 mt-2 font-mono">Сканирайте</div>`; 
+            
+            // Create session doc including title
+            await setDoc(getSessionRefById(sessionDocId), {activeQ:-1, status:'waiting', hostId:currentQuizOwnerId, pin:sessionID, timestamp:serverTimestamp(), quizTitle: currentQuiz.title}); 
+            
+            lastFetchedParticipants=[]; 
+            onSnapshot(getParticipantsCollection(sessionDocId),s=>{lastFetchedParticipants=s.docs.map(d=>({...d.data(),id:d.id}));window.renderHostDashboard()}); 
+        };
+
+        window.initHostPlayer=()=>{
+            document.getElementById('host-setup-area').classList.add('hidden');
+            hostPlayer=new YT.Player('host-video',{videoId:currentQuiz.v,width:'100%',height:'100%',playerVars:{autoplay:1},events:{'onStateChange':(e)=>{if(e.data===1){
+                 const i=setInterval(()=>{
+                     const t=Math.floor(hostPlayer.getCurrentTime());
+                     const qIdx=currentQuiz.q.findIndex(q=>Math.abs(q.time-t)<=1);
+                     if(qIdx!==-1 && qIdx!==liveActiveQIdx){ 
+                        liveActiveQIdx=qIdx; 
+                        hostPlayer.pauseVideo(); 
+                        document.getElementById('host-resume-overlay').classList.remove('hidden'); 
+                        document.getElementById('host-resume-overlay').classList.add('flex');
+                        updateDoc(getSessionRefById(sessionDocId),{activeQ:qIdx,qData:currentQuiz.q[qIdx],status:'active'}); 
+                     }
+                 },1000); activeIntervals.push(i);
+            }}}});
+        };
+
+        window.resumeHostSession = () => {
+             document.getElementById('host-resume-overlay').classList.add('hidden');
+             document.getElementById('host-resume-overlay').classList.remove('flex');
+             hostPlayer.playVideo();
+             updateDoc(getSessionRefById(sessionDocId), { status: 'playing' });
+        };
+
+        // --- LIVE CLIENT ---
+        window.joinLiveSession = async () => {
+             const pin = document.getElementById('live-pin').value.trim();
+             const name = document.getElementById('live-student-name').value.trim();
+             if(!pin||!name) return window.showMessage("Попълнете данните!", "error");
+             document.getElementById('client-player-name').innerText = name;
+             window.showMessage("Свързване...");
+             if(!auth.currentUser) await signInAnonymously(auth);
+             const snap=await getDoc(getSessionRefById(pin));
+             if(!snap.exists()) return window.showMessage("Невалиден ПИН", "error");
+             sessionID=pin; sessionDocId=pin; studentNameValue=name;
+             window.switchScreen('live-client');
+             const ava=AVATARS[Math.floor(Math.random()*AVATARS.length)];
+             document.getElementById('my-avatar-display').innerText=ava;
+             try{await setDoc(getParticipantRef(pin,auth.currentUser.uid),{name,sessionId:pin,avatar:ava,score:0},{merge:true})}catch(e){await setDoc(doc(db,'artifacts',finalAppId,'public','data','participants',auth.currentUser.uid),{name,sessionId:pin,avatar:ava,score:0},{merge:true})}
+             
+             onSnapshot(getSessionRefById(pin),s=>{
+                 const d=s.data(); if(!d)return;
+                 if(d.status==='finished'){
+                    window.switchScreen('live-client'); document.getElementById('client-question').classList.add('hidden'); document.getElementById('client-waiting').classList.add('hidden'); document.getElementById('client-finished').classList.remove('hidden'); document.getElementById('final-score-display').innerText=liveScore;
+                 }else if(d.status==='active' && d.activeQ !== liveActiveQIdx){
+                    liveActiveQIdx=d.activeQ; window.currentLiveQ=d.qData;
+                    document.getElementById('client-question').classList.remove('hidden'); document.getElementById('client-waiting').classList.add('hidden');
+                    document.getElementById('live-q-text-client').innerText=d.qData.text; window.renderLiveQuestionUI(d.qData);
+                 }else if(d.status!=='active'){ 
+                    document.getElementById('client-question').classList.add('hidden'); document.getElementById('client-waiting').classList.remove('hidden');
+                 }
+             });
+        };
+
         window.renderLiveQuestionUI = (q) => {
             const c = document.getElementById('live-options-client'); c.innerHTML = '';
             tempSelectedAnswer = null;
@@ -414,16 +608,14 @@
         };
 
         window.confirmLiveAnswer = async () => {
-             if(lastAnsweredIdx === liveActiveQIdx) return;
-             lastAnsweredIdx = liveActiveQIdx;
+             if(lastAnsweredIndex === liveActiveQIdx) return;
+             lastAnsweredIndex = liveActiveQIdx;
              
              let isCor = false;
              if (window.currentLiveQ.type === 'numeric_slider') {
                  const val = Number(document.getElementById('live-range').value);
                  isCor = Math.abs(val - window.currentLiveQ.correct) <= (window.currentLiveQ.tolerance || 0);
-             } else {
-                 isCor = (tempSelectedAnswer === window.currentLiveQ.correct);
-             }
+             } else isCor = (tempSelectedAnswer === window.currentLiveQ.correct);
              
              if(isCor) liveScore += (window.currentLiveQ.points || 1);
              
@@ -448,33 +640,6 @@
         };
 
         // --- AUTH & COMMON ---
-        window.joinLiveSession = async () => {
-             const pin = document.getElementById('live-pin').value.trim();
-             const name = document.getElementById('live-student-name').value.trim();
-             if(!pin||!name) return window.showMessage("Попълнете данните!", "error");
-             document.getElementById('client-player-name').innerText = name;
-             window.showMessage("Свързване...");
-             if(!auth.currentUser) await signInAnonymously(auth);
-             const snap=await getDoc(getSessionRefById(pin));
-             if(!snap.exists()) return window.showMessage("Невалиден ПИН", "error");
-             sessionID=pin; sessionDocId=pin; studentNameValue=name;
-             window.switchScreen('live-client');
-             const ava=AVATARS[Math.floor(Math.random()*AVATARS.length)];
-             document.getElementById('my-avatar-display').innerText=ava;
-             try{await setDoc(getParticipantRef(pin,auth.currentUser.uid),{name,sessionId:pin,avatar:ava,score:0},{merge:true})}catch(e){await setDoc(doc(db,'artifacts',finalAppId,'public','data','participants',auth.currentUser.uid),{name,sessionId:pin,avatar:ava,score:0},{merge:true})}
-             onSnapshot(getSessionRefById(pin),s=>{
-                 const d=s.data(); if(!d)return;
-                 if(d.status==='finished'){
-                    window.switchScreen('live-client'); document.getElementById('client-question').classList.add('hidden'); document.getElementById('client-waiting').classList.add('hidden'); document.getElementById('client-finished').classList.remove('hidden'); document.getElementById('final-score-display').innerText=liveScore;
-                 }else if(d.status==='active' && d.activeQ !== liveActiveQIdx){
-                    liveActiveQIdx=d.activeQ; window.currentLiveQ=d.qData;
-                    document.getElementById('client-question').classList.remove('hidden'); document.getElementById('client-waiting').classList.add('hidden');
-                    document.getElementById('live-q-text-client').innerText=d.qData.text; window.renderLiveQuestionUI(d.qData);
-                 }else if(d.status!=='active'){
-                    document.getElementById('client-question').classList.add('hidden'); document.getElementById('client-waiting').classList.remove('hidden');
-                 }
-             });
-        };
         window.handleAuthSubmit = async () => {
             const em = document.getElementById('auth-email').value, ps = document.getElementById('auth-password').value;
             try {
@@ -486,34 +651,139 @@
                 window.switchScreen('teacher-dashboard');
             }catch(e){ if (e.code === 'auth/operation-not-allowed') { if(!auth.currentUser) await signInAnonymously(auth); window.switchScreen('teacher-dashboard'); } else window.showMessage("Грешка: "+e.message,"error"); }
         };
-        window.switchScreen = (n) => { document.querySelectorAll('#app > div').forEach(d=>d.classList.add('hidden')); const t=document.getElementById('screen-'+n); if(t)t.classList.remove('hidden'); if(n==='teacher-dashboard') window.loadMyQuizzes(); if(window.lucide)lucide.createIcons(); window.scrollTo(0,0); };
+        window.switchScreen = (n) => { 
+            document.querySelectorAll('#app > div').forEach(d=>d.classList.add('hidden')); 
+            const t=document.getElementById('screen-'+n); if(t)t.classList.remove('hidden'); 
+            if(n==='teacher-dashboard') { window.loadMyQuizzes(); window.loadSoloResults(); window.loadClassHistory(); } 
+            if(window.lucide)lucide.createIcons(); 
+            window.scrollTo(0,0); 
+        };
         window.showMessage = (t,type='info') => { const c=document.getElementById('msg-container'); if(!c)return; const m=document.createElement('div'); m.className=`p-4 rounded-xl text-white shadow-lg mb-2 animate-pop glass-panel flex items-center gap-3 ${type==='error'?'bg-rose-500':'bg-brand-600'}`; m.innerText=t; c.appendChild(m); setTimeout(()=>m.remove(),3000); };
         window.toggleAuthMode=()=>{authMode=authMode==='login'?'register':'login'; document.getElementById('auth-teacher-code-container').classList.toggle('hidden',authMode!=='register'); document.getElementById('auth-submit-btn').innerText=authMode==='register'?"Регистрирай се":"Влез"};
         window.handleLogout=async()=>{await signOut(auth); location.reload();};
         window.loadMyQuizzes=()=>{ const targetUid = user?.uid || 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; onSnapshot(collection(db,'artifacts',finalAppId,'users',targetUid,'my_quizzes'),s=>{myQuizzes=s.docs.map(d=>({...d.data(),id:d.id}));window.renderMyQuizzes()}) };
-        window.loadSoloResults=()=>{ const targetUid = user?.uid || 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; onSnapshot(collection(db,'artifacts',finalAppId,'users',targetUid,'solo_results'),s=>{soloResults=s.docs.map(d=>({...d.data(),id:d.id}));window.renderSoloResults()}) };
+        
+        window.loadSoloResults=()=>{ 
+            const targetUid = user?.uid || 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; 
+            onSnapshot(collection(db,'artifacts',finalAppId,'users',targetUid,'solo_results'), s=>{
+                soloResults=s.docs.map(d=>({...d.data(),id:d.id}));
+                window.renderSoloResults();
+            }) 
+        };
+
+        window.loadClassHistory = () => {
+             const targetUid = user?.uid || 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2';
+             onSnapshot(collection(db,'artifacts',finalAppId,'users',targetUid,'class_history'), s=>{
+                 classHistory=s.docs.map(d=>({...d.data(),id:d.id}));
+                 window.renderClassHistory();
+             });
+        };
+
         window.renderMyQuizzes = function(){ const c=document.getElementById('my-quizzes-list');if(!c)return; c.innerHTML=myQuizzes.map(q=>`<div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg transition-all flex flex-col justify-between group"><div class="mb-4"><h4 class="font-black text-slate-800 text-lg line-clamp-2">${q.title}</h4><p class="text-[10px] text-slate-400 font-black uppercase mt-2">${q.questions?.length||0} въпроса</p></div><div class="flex items-center gap-2 pt-4 border-t border-slate-50"><button onclick="window.startHostFromLibrary('${q.id}')" title="Старт на живо" class="flex-1 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-sm"><i data-lucide="play" class="w-3.5 h-3.5"></i> Старт</button><button onclick="window.showShareCode('${q.id}')" title="Код" class="p-2.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-xl transition-all"><i data-lucide="share-2" class="w-4 h-4"></i></button><button onclick="window.editQuiz('${q.id}')" title="Редакция" class="p-2.5 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded-xl transition-all"><i data-lucide="pencil" class="w-4 h-4"></i></button><button onclick="window.deleteQuiz('${q.id}')" title="Изтрий" class="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-all"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join(''); lucide.createIcons(); }
-        window.renderSoloResults = function(){ const b=document.getElementById('solo-results-body');if(!b)return; const s=[...soloResults].sort((a,b)=>getTimestampMs(b.timestamp)-getTimestampMs(a.timestamp)); b.innerHTML=s.map(r=>`<tr class="border-b border-slate-50 text-xs hover:bg-brand-50/30 transition-colors"><td class="p-4 font-bold text-slate-700">${r.studentName}</td><td class="p-4 text-slate-500 truncate max-w-[120px]">${r.quizTitle}</td><td class="p-4 text-slate-400 font-mono">${formatDate(r.timestamp)}</td><td class="p-4 text-right"><span class="bg-brand-100 text-brand-700 px-2.5 py-1 rounded-lg font-black">${r.score}</span></td></tr>`).join(''); }
+        
+        window.renderSoloResults = function(){ 
+            const b=document.getElementById('solo-results-body');if(!b)return; 
+            const s=[...soloResults].sort((a,b)=>getTimestampMs(b.timestamp)-getTimestampMs(a.timestamp)); 
+            b.innerHTML=s.map(r=>`<tr class="border-b border-slate-50 text-xs hover:bg-brand-50/30 transition-colors"><td class="p-4 font-bold text-slate-700">${r.studentName}</td><td class="p-4 text-slate-500 truncate max-w-[120px]">${r.quizTitle}</td><td class="p-4 text-slate-400 font-mono">${formatDate(r.timestamp)}</td><td class="p-4 text-right"><span class="bg-brand-100 text-brand-700 px-2.5 py-1 rounded-lg font-black">${r.score}</span></td><td class="p-4 text-center"><button onclick="window.deleteSoloResult('${r.id}')" class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Изтрий"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`).join(''); 
+            lucide.createIcons();
+        }
+
+        window.renderClassHistory = function(){
+            const b=document.getElementById('class-results-body');
+            const empty=document.getElementById('class-history-empty');
+            if(!b)return;
+            
+            if(classHistory.length === 0) {
+                b.innerHTML = ''; empty.classList.remove('hidden'); return;
+            }
+            empty.classList.add('hidden');
+            
+            const s = [...classHistory].sort((a,b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp));
+            
+            b.innerHTML = s.map(r => `
+                <tr class="border-b border-slate-50 text-xs hover:bg-slate-50 transition-colors">
+                    <td class="p-4 text-slate-400 font-mono">${formatDate(r.timestamp)}</td>
+                    <td class="p-4 font-bold text-slate-700">${r.quizTitle || 'Без заглавие'}</td>
+                    <td class="p-4 text-slate-500 font-mono">${r.pin}</td>
+                    <td class="p-4 text-center"><button onclick="window.viewClassSessionResults('${r.sessionId}', '${r.quizTitle}')" class="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg font-bold text-[10px] hover:bg-indigo-100 transition-all flex items-center justify-center gap-1 mx-auto"><i data-lucide="eye" class="w-3 h-3"></i> Виж</button></td>
+                    <td class="p-4 text-center"><button onclick="window.deleteClassSession('${r.id}', '${r.sessionId}')" class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Изтрий Сесия"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        };
+
+        window.viewClassSessionResults = async (sid, title) => {
+            document.getElementById('m-class-res-title').innerText = title;
+            const b = document.getElementById('m-class-res-body');
+            b.innerHTML = '<tr><td colspan="2" class="p-4 text-center text-slate-400">Зареждане...</td></tr>';
+            document.getElementById('modal-class-results').classList.remove('hidden');
+            
+            try {
+                const snap = await getDocs(getParticipantsCollection(sid));
+                const parts = snap.docs.map(d => d.data()).sort((a,b) => (b.score||0) - (a.score||0));
+                
+                if(parts.length === 0) {
+                     b.innerHTML = '<tr><td colspan="2" class="p-8 text-center text-slate-400 italic">Няма намерени участници или данните са изтрити.</td></tr>';
+                } else {
+                     b.innerHTML = parts.map(p => `
+                        <tr>
+                            <td class="p-4 font-bold text-slate-700 flex items-center gap-2"><span class="text-xl">${p.avatar||'👤'}</span> ${p.name}</td>
+                            <td class="p-4 text-right font-black text-brand-600">${p.score||0}</td>
+                        </tr>
+                     `).join('');
+                }
+            } catch(e) {
+                b.innerHTML = '<tr><td colspan="2" class="p-4 text-center text-rose-500">Грешка при зареждане.</td></tr>';
+            }
+        };
+
+        window.deleteSoloResult = async (id) => {
+            if(confirm("Сигурни ли сте, че искате да изтриете този резултат?")) {
+                await deleteDoc(doc(getTeacherSoloResultsCollection(user.uid), id));
+            }
+        };
+
+        window.deleteClassSession = async (historyId, sessionId) => {
+             if(confirm("Внимание! Това ще изтрие записа от историята И всички данни за участниците от тази сесия, за да освободи място. Продължи?")) {
+                 // 1. Delete history record
+                 await deleteDoc(doc(collection(db,'artifacts',finalAppId,'users',user.uid,'class_history'), historyId));
+                 
+                 // 2. Try to cleanup public session data (best effort)
+                 try {
+                     await deleteDoc(getSessionRefById(sessionId));
+                     // Note: Subcollections (participants) are not automatically deleted in Firestore client SDK, 
+                     // but hiding the session is usually enough for UX. For true space saving, a Cloud Function is better,
+                     // but we can try to fetch and delete participants here just in case.
+                     const pSnap = await getDocs(getParticipantsCollection(sessionId));
+                     const batch = [];
+                     pSnap.forEach(d => deleteDoc(d.ref)); // Client side sequential delete
+                 } catch(e) { console.warn("Cleanup error", e); }
+                 
+                 window.showMessage("Сесията е изтрита.");
+             }
+        };
+
         window.deleteQuiz=async(id)=>{if(confirm("Изтриване?"))await deleteDoc(doc(db,'artifacts',finalAppId,'users',user.uid,'my_quizzes',id))};
         window.exportExcel=()=>{const ws=XLSX.utils.json_to_sheet(getExpData()); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Res"); XLSX.writeFile(wb,`QuizResults_${sessionID}.xlsx`);};
         window.exportPDF=async()=>{const {jsPDF}=window.jspdf; const doc=new jsPDF(); doc.text(`Резултати`,10,10); doc.autoTable({head:[['Име','Точки']], body:getExpData().map(d=>[d.Name,d.Score])}); doc.save(`Results.pdf`);};
         window.startHostFromLibrary=async(id)=>{ const q=myQuizzes.find(x=>x.id===id); if(!q)return; currentQuiz={v:q.v,q:q.questions,title:q.title}; currentQuizOwnerId = user ? user.uid : 'uNdGTBsgatZX4uOPTZqKG9qLJVZ2'; await window.openLiveHost(); };
-        window.openLiveHost=async()=>{ 
-            sessionID=Math.floor(1000+Math.random()*9000).toString(); sessionDocId=sessionID; window.switchScreen('live-host'); document.getElementById('host-pin').innerText=sessionID; 
-            const qrUrl=`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.origin+window.location.pathname+'?pin='+sessionID)}`; 
-            document.getElementById('host-qr-container').innerHTML=`<div class="text-[10px] uppercase font-black text-slate-400 mb-2 tracking-widest">QR Вход</div><img src="${qrUrl}" class="w-32 h-32 rounded-xl border-4 border-white shadow-md"><div class="text-[9px] text-slate-300 mt-2 font-mono">Сканирайте</div>`; 
-            await setDoc(getSessionRefById(sessionDocId), {activeQ:-1, status:'waiting', hostId:currentQuizOwnerId, pin:sessionID, timestamp:serverTimestamp()}); 
-            lastFetchedParticipants=[]; 
-            onSnapshot(getParticipantsCollection(sessionDocId),s=>{lastFetchedParticipants=s.docs.map(d=>({...d.data(),id:d.id}));window.renderHostDashboard()}); 
+        
+        window.finishLiveSession=async()=>{
+            await updateDoc(getSessionRefById(sessionDocId),{status:'finished'});
+            document.getElementById('export-buttons-container').classList.remove('hidden');document.getElementById('export-buttons-container').classList.add('flex');
+            
+            // Record in History
+            if(auth.currentUser) {
+                try {
+                    await addDoc(collection(db,'artifacts',finalAppId,'users',auth.currentUser.uid,'class_history'), {
+                        sessionId: sessionDocId,
+                        pin: sessionID,
+                        quizTitle: currentQuiz.title,
+                        timestamp: serverTimestamp()
+                    });
+                } catch(e) { console.warn("History save fail", e); }
+            }
         };
-        window.initHostPlayer=()=>{hostPlayer=new YT.Player('host-video',{videoId:currentQuiz.v,width:'100%',height:'100%',playerVars:{autoplay:1},events:{'onStateChange':(e)=>{if(e.data===1){
-             const i=setInterval(()=>{
-                 const t=Math.floor(hostPlayer.getCurrentTime());
-                 const qIdx=currentQuiz.q.findIndex(q=>Math.abs(q.time-t)<=1);
-                 if(qIdx!==-1 && qIdx!==liveActiveQIdx){ liveActiveQIdx=qIdx; hostPlayer.pauseVideo(); updateDoc(getSessionRefById(sessionDocId),{activeQ:qIdx,qData:currentQuiz.q[qIdx],status:'active'}); }
-             },1000); activeIntervals.push(i);
-        }}}});};
-        window.finishLiveSession=async()=>{await updateDoc(getSessionRefById(sessionDocId),{status:'finished'});document.getElementById('export-buttons-container').classList.remove('hidden');document.getElementById('export-buttons-container').classList.add('flex');};
         window.quitHostSession=()=>{if(confirm("Край?"))window.switchScreen('teacher-dashboard')};
         
         window.saveQuizToLibrary=async()=>{const t=prompt("Име:"); if(!t)return; await addDoc(collection(db,'artifacts',finalAppId,'users',user.uid,'my_quizzes'),{title:t,v:currentVideoId,questions,createdAt:serverTimestamp()}); window.switchScreen('teacher-dashboard');};
@@ -543,6 +813,29 @@
         window.submitImport=()=>{const c=document.getElementById('import-code-input').value; const d=decodeQuizCode(c); if(!d)return window.showMessage("Невалиден код","error"); window.saveImportedQuiz({title:d.title||"Import",v:d.v,q:d.q||[]}); document.getElementById('modal-import').classList.add('hidden');};
         window.saveImportedQuiz=async(d)=>{await addDoc(collection(db,'artifacts',finalAppId,'users',user.uid,'my_quizzes'),{title:d.title,v:d.v,questions:d.q,createdAt:serverTimestamp()});window.showMessage("Импортирано!","success")};
 
+        // NEW: Fixed renderHostDashboard
+        window.renderHostDashboard = () => {
+            const c = document.getElementById('host-participant-count');
+            if(c) c.innerText = lastFetchedParticipants.length;
+
+            const b = document.getElementById('host-results-body');
+            if(!b) return;
+
+            const sorted = [...lastFetchedParticipants].sort((a,b) => (b.score||0) - (a.score||0));
+
+            b.innerHTML = sorted.map((p, i) => `
+                <tr class="transition-all animate-fade-in">
+                    <td class="p-3 font-black text-slate-400 text-xs w-10">#${i+1}</td>
+                    <td class="p-3 font-bold text-slate-800 flex items-center gap-2">
+                        <span class="text-xl">${p.avatar||'😎'}</span> ${p.name}
+                    </td>
+                    <td class="p-3 text-right font-black text-brand-600">${p.score||0}</td>
+                </tr>
+            `).join('');
+        };
+        
+        window.openAdminPanel = () => { window.showMessage("Админ панелът е в разработка."); };
+
         const getTeacherSoloResultsCollection = (tid) => collection(db, 'artifacts', finalAppId, 'users', tid, 'solo_results');
         const getSessionRefById = (id) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id);
         const getParticipantsCollection = (id) => collection(db, 'artifacts', finalAppId, 'public', 'data', 'sessions', id, 'participants');
@@ -550,6 +843,27 @@
         const getLegacyParticipantsCollection = () => collection(db, 'artifacts', finalAppId, 'public', 'data', 'participants');
         const getLegacyParticipantRef = (pid) => doc(db, 'artifacts', finalAppId, 'public', 'data', 'participants', pid);
         function getExpData(){return lastFetchedParticipants.map(p=>({Name:p.name,Score:p.score}))}
+
+        // AUTH LISTENER
+        onAuthStateChanged(auth, (u) => {
+            if (u) {
+                user = u;
+                if(window.location.search.includes('pin=')) return; // Don't auto-redirect if joining via link
+                
+                // Check role
+                getDoc(doc(db,'artifacts',finalAppId,'users',u.uid,'settings','profile')).then(s => {
+                    if(s.exists() && s.data().role === 'teacher') {
+                        isTeacher = true;
+                        document.getElementById('user-email-display').innerText = s.data().email;
+                        window.switchScreen('teacher-dashboard');
+                    }
+                });
+            } else {
+                user = null;
+                isTeacher = false;
+                window.switchScreen('welcome');
+            }
+        });
 
         window.addEventListener('DOMContentLoaded',()=>{const p=new URLSearchParams(window.location.search).get('pin');if(p)setTimeout(()=>{window.switchTab('class');const el=document.getElementById('live-pin');if(el){el.value=p;window.showMessage("ПИН зареден!")}},1000); setTimeout(()=>{const l=document.getElementById('auth-loader');if(l)l.classList.add('hidden')},3000)});
         window.onYouTubeIframeAPIReady = () => { isYTReady = true; console.log("YT Ready"); };
